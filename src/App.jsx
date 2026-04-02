@@ -3,6 +3,7 @@ import { useState } from "react";
 function App() {
   const [role, setRole] = useState("");
   const [showDemo, setShowDemo] = useState(false);
+  const telegramLink = "https://web.telegram.org/a/#@Roleprep_bot";
 
   const primaryButtonStyle = {
     marginTop: "20px",
@@ -64,9 +65,12 @@ function App() {
           >
             Get instant interview practice before your next interview.
           </p>
-          <a href="https://t.me/Roleprep_bot?start=web">
+          <a href={telegramLink} target="_blank" rel="noopener noreferrer">
             <button style={primaryButtonStyle}>Start on Telegram</button>
           </a>
+          <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
+            If Telegram does not open, search "RolePrep" in Telegram.
+          </p>
         </section>
 
         <section style={{ marginBottom: "30px" }}>
@@ -133,9 +137,12 @@ function App() {
             <div style={{ marginBottom: "8px" }}>Rs 10 - 1 session</div>
             <div style={{ marginBottom: "8px" }}>Rs 29 - 5 sessions</div>
             <div style={{ marginBottom: "8px" }}>Rs 99 - 28 days unlimited</div>
-            <a href="https://t.me/Roleprep_bot?start=pricing">
+            <a href={telegramLink} target="_blank" rel="noopener noreferrer">
               <button style={primaryButtonStyle}>Get Started</button>
             </a>
+            <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
+              If Telegram does not open, search "RolePrep" in Telegram.
+            </p>
           </div>
         </section>
 
