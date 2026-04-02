@@ -4,13 +4,38 @@ function App() {
   const [role, setRole] = useState("");
   const [showDemo, setShowDemo] = useState(false);
 
+  const primaryButtonStyle = {
+    marginTop: "20px",
+    padding: "12px 24px",
+    backgroundColor: "#2563eb",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "15px",
+    fontWeight: "600",
+  };
+
+  const cardStyle = {
+    background: "white",
+    padding: "20px",
+    borderRadius: "8px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+  };
+
+  const sectionTitleStyle = {
+    fontSize: "24px",
+    fontWeight: "700",
+    margin: "0 0 12px",
+  };
+
   return (
     <div
       style={{
-        backgroundColor: "#ffffff",
-        color: "#000000",
         minHeight: "100vh",
-        width: "100%",
+        background: "#f9fafb",
+        color: "#111827",
+        fontFamily: "system-ui, Arial, sans-serif",
       }}
     >
       <div
@@ -18,78 +43,111 @@ function App() {
           maxWidth: "900px",
           margin: "0 auto",
           padding: "40px 20px",
-          fontFamily: "Arial, sans-serif",
         }}
       >
-        <section style={{ marginBottom: "50px" }}>
-          <h1 style={{ marginTop: 0 }}>Practice real interview questions in 5 minutes</h1>
-          <p>Get instant interview practice before your next interview</p>
-          <a href="https://t.me/Roleprep_bot?start=web">
-            <button style={{ padding: "10px 20px", cursor: "pointer", marginTop: "16px" }}>
-              Start on Telegram
-            </button>
-          </a>
-        </section>
-
-        <section style={{ marginBottom: "50px" }}>
-          <h2>Try Demo</h2>
-          <input
-            type="text"
-            placeholder="Enter role (e.g. Backend Developer)"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            style={{ padding: "10px", width: "100%", marginBottom: "10px" }}
-          />
-          <button
-            onClick={() => setShowDemo(true)}
-            style={{ padding: "10px 20px", cursor: "pointer" }}
+        <section style={{ marginBottom: "30px", textAlign: "center" }}>
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: "700",
+              margin: 0,
+            }}
           >
-            Start Demo
-          </button>
-
-          {showDemo && (
-            <div
-              style={{
-                marginTop: "20px",
-                padding: "10px",
-                border: "1px solid #ccc",
-              }}
-            >
-              <strong>Question:</strong>
-              <p>Tell me about a challenging bug you fixed.</p>
-            </div>
-          )}
-        </section>
-
-        <section style={{ marginBottom: "50px" }}>
-          <h2>How It Works</h2>
-          <ol style={{ paddingLeft: "20px" }}>
-            <li>Open Telegram bot</li>
-            <li>Choose your role</li>
-            <li>Start interview</li>
-            <li>Get instant questions</li>
-          </ol>
-        </section>
-
-        <section style={{ marginBottom: "50px" }}>
-          <h2>Pricing</h2>
-          <p>Rs 10 - 1 session</p>
-          <p>Rs 29 - 5 sessions</p>
-          <p>Rs 99 - 28 days unlimited</p>
-          <a href="https://t.me/Roleprep_bot?start=pricing">
-            <button style={{ padding: "10px 20px", cursor: "pointer", marginTop: "16px" }}>
-              Get Started
-            </button>
+            Practice real interview questions in 5 minutes
+          </h1>
+          <p
+            style={{
+              color: "#6b7280",
+              marginTop: "10px",
+              fontSize: "16px",
+            }}
+          >
+            Get instant interview practice before your next interview.
+          </p>
+          <a href="https://t.me/Roleprep_bot?start=web">
+            <button style={primaryButtonStyle}>Start on Telegram</button>
           </a>
         </section>
 
-        <section style={{ marginBottom: "50px" }}>
-          <h2>Why RolePrep</h2>
-          <ul style={{ paddingLeft: "20px" }}>
-            <li>Real interview-style questions</li>
-            <li>Role-specific preparation</li>
-            <li>Fast and simple practice</li>
-          </ul>
+        <section style={{ marginBottom: "30px" }}>
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>Try Demo</h2>
+            <p style={{ margin: "0 0 16px", color: "#6b7280" }}>
+              Enter your target role and preview the kind of interview question you will get.
+            </p>
+            <input
+              type="text"
+              placeholder="Enter role (e.g. Backend Developer)"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                fontSize: "15px",
+                color: "#111827",
+              }}
+            />
+            <button
+              onClick={() => setShowDemo(true)}
+              style={primaryButtonStyle}
+            >
+              Start Demo
+            </button>
+
+            {showDemo && (
+              <div
+                style={{
+                  marginTop: "20px",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  backgroundColor: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                }}
+              >
+                <strong style={{ display: "block", marginBottom: "8px" }}>Question</strong>
+                <p style={{ margin: 0, lineHeight: "1.7" }}>
+                  Tell me about a challenging bug you fixed and how you approached the solution.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section style={{ marginBottom: "30px" }}>
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>How It Works</h2>
+            <ol style={{ paddingLeft: "20px", margin: 0, lineHeight: "1.8" }}>
+              <li>Open Telegram bot</li>
+              <li>Choose your role</li>
+              <li>Start interview</li>
+              <li>Get instant questions</li>
+            </ol>
+          </div>
+        </section>
+
+        <section style={{ marginBottom: "30px" }}>
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>Pricing</h2>
+            <div style={{ marginBottom: "8px" }}>Rs 10 - 1 session</div>
+            <div style={{ marginBottom: "8px" }}>Rs 29 - 5 sessions</div>
+            <div style={{ marginBottom: "8px" }}>Rs 99 - 28 days unlimited</div>
+            <a href="https://t.me/Roleprep_bot?start=pricing">
+              <button style={primaryButtonStyle}>Get Started</button>
+            </a>
+          </div>
+        </section>
+
+        <section style={{ marginBottom: "30px" }}>
+          <div style={cardStyle}>
+            <h2 style={sectionTitleStyle}>Why RolePrep</h2>
+            <ul style={{ paddingLeft: "20px", margin: 0, lineHeight: "1.8" }}>
+              <li>Real interview-style questions tailored to your target role.</li>
+              <li>Fast, simple practice when you need a quick confidence boost.</li>
+              <li>Focused preparation without long setup or complicated flows.</li>
+            </ul>
+          </div>
         </section>
       </div>
     </div>
