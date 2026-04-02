@@ -66,11 +66,34 @@ function App() {
             Get instant interview practice before your next interview.
           </p>
           <a href={telegramLink} target="_blank" rel="noopener noreferrer">
-            <button style={primaryButtonStyle}>Start on Telegram</button>
+            <button style={primaryButtonStyle}>Open Bot in Telegram</button>
           </a>
-          <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
-            After opening Telegram, click "Start" to begin your interview.
-          </p>
+          <div
+            style={{
+              marginTop: "15px",
+              padding: "12px",
+              backgroundColor: "#f3f4f6",
+              borderRadius: "6px",
+              fontSize: "14px",
+              textAlign: "left",
+            }}
+          >
+            <strong>How to start:</strong>
+            <ol style={{ marginTop: "8px", paddingLeft: "18px" }}>
+              <li>Click "Open Bot in Telegram"</li>
+              <li>Telegram will open</li>
+              <li>Click the blue "Start" button</li>
+              <li>Your interview begins</li>
+            </ol>
+          </div>
+          <a
+            href="https://web.telegram.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "inline-block", marginTop: "12px", color: "#2563eb" }}
+          >
+            Open Telegram Web
+          </a>
         </section>
 
         <section style={{ marginBottom: "30px" }}>
@@ -152,9 +175,31 @@ function App() {
             <a href={telegramLink} target="_blank" rel="noopener noreferrer">
               <button style={primaryButtonStyle}>Get Started</button>
             </a>
-            <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
-              After opening Telegram, click "Start" to begin your interview.
-            </p>
+            <div
+              style={{
+                marginTop: "15px",
+                padding: "12px",
+                backgroundColor: "#f3f4f6",
+                borderRadius: "6px",
+                fontSize: "14px",
+              }}
+            >
+              <strong>How to start:</strong>
+              <ol style={{ marginTop: "8px", paddingLeft: "18px" }}>
+                <li>Click "Open Bot in Telegram"</li>
+                <li>Telegram will open</li>
+                <li>Click the blue "Start" button</li>
+                <li>Your interview begins</li>
+              </ol>
+            </div>
+            <a
+              href="https://web.telegram.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-block", marginTop: "12px", color: "#2563eb" }}
+            >
+              Open Telegram Web
+            </a>
           </div>
         </section>
 
