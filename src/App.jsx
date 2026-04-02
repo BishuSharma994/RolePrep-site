@@ -3,7 +3,7 @@ import { useState } from "react";
 function App() {
   const [role, setRole] = useState("");
   const [showDemo, setShowDemo] = useState(false);
-  const telegramLink = "https://web.telegram.org/a/#@Roleprep_bot";
+  const telegramLink = "https://t.me/Roleprep_bot";
 
   const primaryButtonStyle = {
     marginTop: "20px",
@@ -69,8 +69,20 @@ function App() {
             <button style={primaryButtonStyle}>Start on Telegram</button>
           </a>
           <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
-            If Telegram does not open, search "RolePrep" in Telegram.
+            After opening Telegram, click "Start" to begin your interview.
           </p>
+        </section>
+
+        <section style={{ marginBottom: "30px" }}>
+          <div style={cardStyle}>
+            <h3 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 12px" }}>How to Start</h3>
+            <ol style={{ paddingLeft: "20px", margin: 0, lineHeight: "1.8" }}>
+              <li>Click "Start on Telegram"</li>
+              <li>Telegram will open</li>
+              <li>Click "Start" button</li>
+              <li>Your interview begins</li>
+            </ol>
+          </div>
         </section>
 
         <section style={{ marginBottom: "30px" }}>
@@ -141,7 +153,7 @@ function App() {
               <button style={primaryButtonStyle}>Get Started</button>
             </a>
             <p style={{ marginTop: "10px", fontSize: "14px", color: "#6b7280" }}>
-              If Telegram does not open, search "RolePrep" in Telegram.
+              After opening Telegram, click "Start" to begin your interview.
             </p>
           </div>
         </section>
