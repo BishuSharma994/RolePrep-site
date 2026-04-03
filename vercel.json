@@ -1,6 +1,10 @@
 {
     "rewrites": [
         {
+            "source": "/privacy",
+            "destination": "/"
+        },
+        {
             "source": "/api/(.*)",
             "destination": "http://64.227.156.50:8000/$1"
         }
