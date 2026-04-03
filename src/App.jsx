@@ -171,9 +171,6 @@ function PrivacyPage() {
         <h1 style={{ fontFamily: "'Sora', sans-serif", fontSize: "clamp(28px, 5vw, 42px)", fontWeight: 700, lineHeight: 1.15, marginBottom: "0.75rem" }}>
           Privacy, payment, and refund policy
         </h1>
-        <p style={{ color: "#94a3b8", fontSize: 16, maxWidth: 560, margin: "0 auto", lineHeight: 1.65 }}>
-          This page opens directly from the Telegram bot link at `/privacy`.
-        </p>
       </div>
 
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "2.5rem 1.5rem 3rem" }}>
