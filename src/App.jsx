@@ -96,6 +96,142 @@ const ROLE_SUGGESTIONS = [
   "DevOps Engineer",
 ];
 
+function PrivacySection() {
+  return (
+    <div
+      id="privacy"
+      style={{
+        background: "white",
+        border: "1.5px solid #e2e8f0",
+        borderRadius: 14,
+        padding: "1.75rem",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+      }}
+    >
+      <h2
+        style={{
+          fontFamily: "'Sora', sans-serif",
+          fontSize: "clamp(24px, 4vw, 28px)",
+          fontWeight: 700,
+          marginBottom: "0.5rem",
+        }}
+      >
+        RolePrep Policy
+      </h2>
+      <p style={{ color: "#6b7280", fontSize: 14, marginBottom: "2rem", lineHeight: 1.7 }}>
+        Please read the following policies carefully before using RolePrep.
+      </p>
+
+      <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>1. Privacy Policy</h3>
+      <p style={{ marginBottom: 16, lineHeight: 1.7 }}>
+        We collect minimal data required to operate the service:
+      </p>
+      <ul style={{ paddingLeft: 24, marginBottom: 16, lineHeight: 1.7 }}>
+        <li style={{ marginBottom: 8 }}>Telegram user ID</li>
+        <li style={{ marginBottom: 8 }}>Messages during interview</li>
+        <li style={{ marginBottom: 8 }}>Payment status</li>
+      </ul>
+      <p style={{ marginBottom: 16, fontWeight: 600 }}>We do NOT sell or share user data.</p>
+
+      <hr
+        style={{
+          margin: "32px 0",
+          borderColor: "#e5e7eb",
+          borderStyle: "solid",
+          borderWidth: "1px 0 0 0",
+        }}
+      />
+
+      <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>2. Payment Policy</h3>
+      <ul style={{ paddingLeft: 24, marginBottom: 16, lineHeight: 1.7 }}>
+        <li style={{ marginBottom: 8 }}>
+          Payments are processed securely via <strong>Razorpay</strong>
+        </li>
+        <li style={{ marginBottom: 8 }}>
+          Two purchase options:
+          <ul style={{ paddingLeft: 20, marginTop: 8 }}>
+            <li style={{ marginBottom: 6 }}>Session-based access</li>
+            <li style={{ marginBottom: 6 }}>Subscription-based access</li>
+          </ul>
+        </li>
+        <li style={{ marginBottom: 8 }}>Service is digital and delivered instantly</li>
+      </ul>
+
+      <hr
+        style={{
+          margin: "32px 0",
+          borderColor: "#e5e7eb",
+          borderStyle: "solid",
+          borderWidth: "1px 0 0 0",
+        }}
+      />
+
+      <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>3. Refund Policy</h3>
+      <div
+        style={{
+          background: "#fef2f2",
+          border: "1.5px solid #fecaca",
+          borderRadius: 8,
+          padding: "14px 18px",
+          marginBottom: 16,
+          fontWeight: 700,
+          fontSize: 16,
+          color: "#dc2626",
+        }}
+      >
+        NO REFUNDS.
+      </div>
+      <p style={{ marginBottom: 12, fontWeight: 600 }}>Reason:</p>
+      <ul style={{ paddingLeft: 24, marginBottom: 16, lineHeight: 1.7 }}>
+        <li style={{ marginBottom: 8 }}>Service is digital</li>
+        <li style={{ marginBottom: 8 }}>No physical product</li>
+        <li style={{ marginBottom: 8 }}>User receives immediate access to interview system</li>
+        <li style={{ marginBottom: 8 }}>Sessions and subscriptions are consumed instantly</li>
+      </ul>
+      <p style={{ marginBottom: 12, fontWeight: 600 }}>By making payment, user agrees:</p>
+      <ul style={{ paddingLeft: 24, marginBottom: 16, lineHeight: 1.7 }}>
+        <li style={{ marginBottom: 8 }}>They understand no refund will be issued</li>
+        <li style={{ marginBottom: 8 }}>They accept terms before purchase</li>
+      </ul>
+
+      <hr
+        style={{
+          margin: "32px 0",
+          borderColor: "#e5e7eb",
+          borderStyle: "solid",
+          borderWidth: "1px 0 0 0",
+        }}
+      />
+
+      <h3 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Contact</h3>
+      <p style={{ marginBottom: 16, lineHeight: 1.7 }}>
+        For any questions or concerns, reach us at{" "}
+        <a
+          href="mailto:sharmabishu001@gmail.com"
+          style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}
+        >
+          sharmabishu001@gmail.com
+        </a>
+      </p>
+
+      <hr
+        style={{
+          margin: "40px 0",
+          borderColor: "#e5e7eb",
+          borderStyle: "solid",
+          borderWidth: "1px 0 0 0",
+        }}
+      />
+      <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.7 }}>
+        &copy; {new Date().getFullYear()} RolePrep. All rights reserved.{" "}
+        <a href="#home" style={{ color: "#2563eb", textDecoration: "none" }}>
+          Back to top
+        </a>
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
   const [role, setRole] = useState("");
   const [questionType, setQuestionType] = useState("behavioral");
@@ -140,7 +276,15 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", color: "#111827", minHeight: "100vh", background: "#f1f5f9" }}>
+    <div
+      id="home"
+      style={{
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+        color: "#111827",
+        minHeight: "100vh",
+        background: "#f1f5f9",
+      }}
+    >
       <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
       {/* ── HERO ── */}
@@ -197,7 +341,7 @@ export default function App() {
         {/* Steps */}
         <div style={{ marginBottom: "1.75rem" }}>
           <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", color: "#64748b", textTransform: "uppercase", marginBottom: "0.85rem" }}>How it works</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", background: "white", border: "1.5px solid #e2e8f0", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", background: "white", border: "1.5px solid #e2e8f0", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
             {[
               { num: 1, icon: "👆", text: "Tap the button above" },
               { num: 2, icon: "📱", text: "Telegram opens automatically" },
@@ -320,7 +464,7 @@ export default function App() {
             Click any plan to open the bot and get started. Payment is handled securely inside Telegram.
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: "0.75rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: "0.75rem" }}>
             {PLANS.map((plan) => (
               <button
                 key={plan.id}
@@ -385,6 +529,9 @@ export default function App() {
           </div>
         </div>
 
+        <div style={{ marginTop: "1.25rem" }}>
+          <PrivacySection />
+        </div>
       </div>
 
       {/* Footer */}
@@ -392,6 +539,10 @@ export default function App() {
         RolePrep · Interview practice via Telegram ·{" "}
         <a href={TELEGRAM_WEB_BOT} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
           @Roleprep_bot
+        </a>
+        {" | "}
+        <a href="#privacy" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+          Privacy & Policy
         </a>
       </div>
 
