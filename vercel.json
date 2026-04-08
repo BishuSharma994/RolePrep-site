@@ -1,12 +1,12 @@
 {
-    "rewrites": [
-        {
-            "source": "/privacy",
-            "destination": "/"
-        },
-        {
-            "source": "/api/(.*)",
-            "destination": "http://64.227.156.50:8000/$1"
-        }
-    ]
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "http://64.227.156.50:8000/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
