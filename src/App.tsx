@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import InstallPrompt from "./components/InstallPrompt";
 
 const InterviewPage = lazy(() => import("./pages/InterviewPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -20,6 +21,7 @@ function RouteLoader() {
 function App() {
   return (
     <BrowserRouter>
+      <InstallPrompt />
       <Suspense fallback={<RouteLoader />}>
         <Routes>
           <Route path="/" element={<InterviewPage />} />

@@ -35,6 +35,9 @@ interface CreateSessionPayload {
   userId: string;
   role: string;
   jdText: string;
+  parserData?: Record<string, unknown>;
+  resumePath?: string;
+  jdPath?: string;
 }
 
 function clampPercentage(value: number) {
@@ -109,14 +112,17 @@ export function getOrCreateLocalUserId() {
   return nextValue;
 }
 
-export async function createSession({ userId, role, jdText }: CreateSessionPayload) {
+export async function createSession({ userId, role, jdText, parserData, resumePath, jdPath }: CreateSessionPayload) {
   const { data } = await API.post("/sessions", {
     user_id: userId,
     role,
     jd_text: jdText,
     parser_data: {
       source: "webapp",
+      ...(parserData ?? {}),
     },
+    resume_path: resumePath,
+    jd_path: jdPath,
   });
 
   return normalizeSession(data.session ?? {});

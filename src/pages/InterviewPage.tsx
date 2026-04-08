@@ -1,11 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { BarChart3, Briefcase, FileText, Loader2, Send, UserRound } from "lucide-react";
+import {
+  BarChart3,
+  Briefcase,
+  CreditCard,
+  Crown,
+  FileText,
+  Layers3,
+  Loader2,
+  Paperclip,
+  Send,
+  Sparkles,
+  Target,
+  UploadCloud,
+  UserRound,
+  X,
+} from "lucide-react";
 import AudioRecorder from "../components/AudioRecorder";
 import UploadBox from "../components/UploadBox";
 import TranscriptPanel from "../components/TranscriptPanel";
 import AnalysisPanel from "../components/AnalysisPanel";
-import { useStore } from "../store";
+import { type Session, useStore } from "../store";
 import { analyzeAudio, createSession, getOrCreateLocalUserId, getSessions, normalizeAnalysisResponse } from "../services/api";
 
 const SAMPLE_QUESTIONS = [
@@ -15,6 +30,8 @@ const SAMPLE_QUESTIONS = [
   "Why do you want this role?",
   "Walk me through a difficult decision you made.",
 ];
+
+const STAGE_ORDER = ["setup", "resume_session", "warmup", "core", "followup", "complete"];
 
 function getInitialValue(key: string) {
   return window.localStorage.getItem(key) ?? "";
@@ -45,6 +62,97 @@ function getErrorMessage(error: unknown) {
   return "Something went wrong. Please try again.";
 }
 
+function formatStageLabel(stage: string) {
+  if (!stage) {
+    return "Setup";
+  }
+
+  return stage
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
+function formatPlanLabel(plan: string) {
+  if (!plan) {
+    return "Free";
+  }
+
+  if (plan === "session_10") {
+    return "Session 10";
+  }
+
+  if (plan === "session_29") {
+    return "Session 29";
+  }
+
+  return plan.replace(/_/g, " ").replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
+function formatExpiry(value: number) {
+  if (!value) {
+    return "Not active";
+  }
+
+  const timestamp = value > 10_000_000_000 ? value : value * 1000;
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getStageIndex(stage: string, questionCount: number) {
+  const exactMatch = STAGE_ORDER.findIndex((entry) => entry === stage);
+  if (exactMatch >= 0) {
+    return exactMatch;
+  }
+
+  if (questionCount >= 6) return 5;
+  if (questionCount >= 4) return 4;
+  if (questionCount >= 2) return 3;
+  if (questionCount >= 1) return 2;
+  return 0;
+}
+
+function getSessionProgress(session: Session | null, hasAnalysis: boolean) {
+  if (!session) {
+    return 8;
+  }
+
+  const stageIndex = getStageIndex(session.currentStage, session.questionCount);
+  const stageProgress = ((stageIndex + 1) / STAGE_ORDER.length) * 100;
+  const questionProgress = Math.min(100, session.questionCount * 18);
+  const analysisProgress = hasAnalysis ? 72 : 0;
+
+  return Math.max(12, Math.min(100, Math.round(Math.max(stageProgress, questionProgress, analysisProgress))));
+}
+
+function getPlanAccent(plan: string) {
+  const normalized = plan.toLowerCase();
+
+  if (normalized.includes("premium")) {
+    return "border-amber-400/30 bg-amber-400/10 text-amber-200";
+  }
+
+  if (normalized.includes("session")) {
+    return "border-sky-400/30 bg-sky-400/10 text-sky-200";
+  }
+
+  return "border-white/10 bg-white/5 text-text-secondary";
+}
+
+function getStageTone(isActive: boolean, isComplete: boolean) {
+  if (isActive) {
+    return "border-accent/40 bg-accent/12 text-accent shadow-[0_0_0_1px_rgba(0,255,136,0.1)]";
+  }
+
+  if (isComplete) {
+    return "border-white/12 bg-white/6 text-text-primary";
+  }
+
+  return "border-white/8 bg-white/[0.03] text-text-dim";
+}
+
 export default function InterviewPage() {
   const {
     transcript,
@@ -62,10 +170,23 @@ export default function InterviewPage() {
   const [userId] = useState(() => getOrCreateLocalUserId());
   const [role, setRole] = useState(() => getInitialValue("roleprep_role"));
   const [jdText, setJdText] = useState(() => getInitialValue("roleprep_jd_text"));
+  const [resumeNotes, setResumeNotes] = useState(() => getInitialValue("roleprep_resume_notes"));
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeExcerpt, setResumeExcerpt] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [question, setQuestion] = useState(SAMPLE_QUESTIONS[0]);
   const [inputMode, setInputMode] = useState<"record" | "upload">("record");
   const [error, setError] = useState("");
+  const [sessionContextKey, setSessionContextKey] = useState("");
+
+  const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
+  const sessionProgress = useMemo(
+    () => getSessionProgress(currentSession, Boolean(analysis)),
+    [analysis, currentSession],
+  );
+  const currentStageIndex = getStageIndex(currentSession?.currentStage || "", currentSession?.questionCount ?? 0);
+  const fieldClassName =
+    "w-full rounded-2xl border border-white/10 bg-[#0f1420] px-4 py-3 text-sm font-body text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-accent/50 focus:bg-[#121826] focus:ring-2 focus:ring-accent/10";
 
   useEffect(() => {
     const index = Math.floor(Math.random() * SAMPLE_QUESTIONS.length);
@@ -81,6 +202,10 @@ export default function InterviewPage() {
   }, [jdText]);
 
   useEffect(() => {
+    window.localStorage.setItem("roleprep_resume_notes", resumeNotes);
+  }, [resumeNotes]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const syncExistingSession = async () => {
@@ -93,6 +218,7 @@ export default function InterviewPage() {
         setSessions(sessions);
         if (sessions[0]) {
           setCurrentSession(sessions[0]);
+          setSessionContextKey(`${sessions[0].role.trim()}::${sessions[0].jdText.trim()}`);
         }
       } catch {
         // The page can still operate without preloading an existing session.
@@ -117,15 +243,16 @@ export default function InterviewPage() {
     setSessions(sessions);
     if (sessions[0]) {
       setCurrentSession(sessions[0]);
+      setSessionContextKey(`${sessions[0].role.trim()}::${sessions[0].jdText.trim()}`);
     }
   };
 
   const ensureSession = async () => {
+    const currentContextKey = `${role.trim()}::${jdText.trim()}`;
     if (
       currentSession &&
       currentSession.userId === userId &&
-      currentSession.role === role.trim() &&
-      currentSession.jdText === jdText.trim()
+      currentContextKey === sessionContextKey
     ) {
       return currentSession;
     }
@@ -134,10 +261,19 @@ export default function InterviewPage() {
       userId,
       role: role.trim(),
       jdText: jdText.trim(),
+      parserData: {
+        candidate_profile: {
+          resume_file_name: resumeFile?.name ?? null,
+          resume_notes: resumeNotes.trim() || null,
+          resume_text_excerpt: resumeExcerpt || null,
+        },
+      },
+      resumePath: resumeFile?.name,
     });
 
     addSession(session);
     setCurrentSession(session);
+    setSessionContextKey(currentContextKey);
     return session;
   };
 
@@ -153,6 +289,23 @@ export default function InterviewPage() {
   const handleFileReady = (blob: Blob | null) => {
     setAudioBlob(blob);
     setError("");
+  };
+
+  const handleResumeFileChange = async (nextFile: File | null) => {
+    setResumeFile(nextFile);
+
+    if (!nextFile) {
+      setResumeExcerpt("");
+      return;
+    }
+
+    if (nextFile.type.startsWith("text/")) {
+      const text = await nextFile.text();
+      setResumeExcerpt(text.slice(0, 4000));
+      return;
+    }
+
+    setResumeExcerpt("");
   };
 
   const handleSubmit = async () => {
@@ -208,174 +361,362 @@ export default function InterviewPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-bg-base noise-overlay">
+    <div className="min-h-dvh bg-[#070b14] noise-overlay">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full bg-accent/5 blur-[120px]" />
-        <div className="absolute right-0 top-1/3 h-80 w-80 rounded-full bg-emerald-500/5 blur-[120px]" />
+        <div className="absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.18),_transparent_38%),radial-gradient(circle_at_20%_30%,_rgba(0,255,136,0.18),_transparent_30%),radial-gradient(circle_at_80%_25%,_rgba(74,144,226,0.12),_transparent_28%)]" />
+        <div className="absolute -left-32 top-24 h-80 w-80 rounded-full bg-accent/10 blur-[120px]" />
+        <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
       </div>
 
       <div className="relative mx-auto max-w-7xl animate-fade-in px-4 py-6 sm:px-6">
-        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-white/8 bg-bg-overlay/80 p-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-mono uppercase tracking-[0.3em] text-accent">RolePrep</p>
-            <h1 className="mt-2 font-display text-4xl tracking-wider text-text-primary sm:text-5xl">Interview Studio</h1>
-            <p className="mt-2 max-w-2xl text-sm font-body leading-relaxed text-text-secondary">
-              Start a real backend session, analyze your spoken answer, and keep the dashboard synced with the live API.
-            </p>
+        <div className="mb-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+            <div className="mb-10 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-mono uppercase tracking-[0.35em] text-accent">RolePrep</p>
+                <h1 className="mt-3 font-display text-5xl leading-none tracking-[0.08em] text-slate-50 sm:text-6xl">
+                  Premium Interview Studio
+                </h1>
+              </div>
+
+              <div className={`rounded-full border px-3 py-1 text-xs font-mono uppercase tracking-[0.25em] ${getPlanAccent(currentPlan)}`}>
+                {formatPlanLabel(currentPlan)}
+              </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
+              <div>
+                <p className="max-w-2xl text-base leading-7 text-slate-300">
+                  Build a sharper answer flow with a cleaner command center, a visible stage ladder, and live plan status while every answer syncs into your backend session.
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Current Stage</p>
+                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">
+                      {formatStageLabel(currentSession?.currentStage || "setup")}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Progress</p>
+                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">{sessionProgress}%</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Questions</p>
+                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">
+                      {currentSession?.questionCount ?? 0}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5 backdrop-blur-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Session Identity</p>
+                    <p className="mt-2 text-sm text-slate-300">Private browser ID connected to your live backend user.</p>
+                  </div>
+                  <Sparkles size={18} className="text-amber-300" />
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm tracking-[0.18em] text-slate-100">
+                  {userId.slice(0, 8)}...{userId.slice(-4)}
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3">
+                  <Link
+                    to="/dashboard"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-mono uppercase tracking-[0.2em] text-[#07110c] transition hover:bg-accent-dim"
+                  >
+                    <BarChart3 size={16} />
+                    Open Dashboard
+                  </Link>
+                  <p className="text-xs leading-6 text-slate-400">
+                    Billing state, stage progress, and question history all reflect the live session record the backend returns for this user.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col items-stretch gap-3 sm:items-end">
-            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-mono uppercase tracking-widest text-text-secondary">
-              User ID: <span className="text-text-primary">{userId.slice(0, 8)}</span>
+          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-mono uppercase tracking-[0.25em] text-slate-400">Access & Billing</p>
+                <h2 className="mt-2 font-display text-3xl tracking-[0.08em] text-slate-50">Plan Command</h2>
+              </div>
+              <Crown size={20} className="text-amber-300" />
             </div>
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-sm font-mono uppercase tracking-widest text-accent transition hover:bg-accent/15"
-            >
-              <BarChart3 size={16} />
-              Dashboard
-            </Link>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/8 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Selected Plan</p>
+                  <CreditCard size={15} className="text-amber-200" />
+                </div>
+                <p className="mt-3 text-2xl font-display tracking-[0.08em] text-slate-50">{formatPlanLabel(currentPlan)}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Credits: <span className="text-slate-100">{currentSession?.sessionCredits ?? 0}</span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Expiry</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-100">
+                    {formatExpiry(currentSession?.subscriptionExpiry ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Session State</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-100">
+                    {currentSession?.activeSession ? "Active" : "Ready to start"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Stage Ladder</p>
+                  <span className="text-xs font-mono uppercase tracking-[0.18em] text-accent">{sessionProgress}% complete</span>
+                </div>
+                <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/6">
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)]" style={{ width: `${sessionProgress}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {STAGE_ORDER.map((stage, index) => (
+                    <div
+                      key={stage}
+                      className={`rounded-2xl border px-3 py-3 text-xs font-mono uppercase tracking-[0.16em] ${getStageTone(
+                        index === currentStageIndex,
+                        index < currentStageIndex,
+                      )}`}
+                    >
+                      {formatStageLabel(stage)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="card-base p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <Briefcase size={14} className="text-text-secondary" />
-              <h2 className="text-xs font-mono uppercase tracking-widest text-text-secondary">Session Setup</h2>
+        <div className="mb-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+            <div className="mb-5 flex items-center gap-2">
+              <Briefcase size={15} className="text-slate-300" />
+              <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Session Setup</h2>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid gap-4">
               <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-widest text-text-secondary">Target Role</span>
+                <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Target Role</span>
                 <div className="relative">
-                  <UserRound size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
+                  <UserRound size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     type="text"
                     value={role}
                     onChange={(event) => setRole(event.target.value)}
-                    placeholder="Backend Engineer, Product Manager, Designer..."
-                    className="w-full rounded-xl border border-white/10 bg-white/4 py-3 pl-10 pr-4 text-sm font-body text-text-primary outline-none transition focus:border-accent/40 focus:bg-white/6"
+                    placeholder="Senior Product Designer, Growth PM, Staff Engineer..."
+                    className={`${fieldClassName} pl-11`}
                   />
                 </div>
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-widest text-text-secondary">Job Description</span>
+                <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Job Description</span>
                 <div className="relative">
-                  <FileText size={14} className="pointer-events-none absolute left-3 top-3.5 text-text-dim" />
+                  <FileText size={14} className="pointer-events-none absolute left-4 top-4 text-slate-500" />
                   <textarea
                     value={jdText}
                     onChange={(event) => setJdText(event.target.value)}
-                    placeholder="Paste the job description or the most relevant responsibilities here."
-                    rows={6}
-                    className="w-full rounded-xl border border-white/10 bg-white/4 py-3 pl-10 pr-4 text-sm font-body leading-relaxed text-text-primary outline-none transition focus:border-accent/40 focus:bg-white/6"
+                    placeholder="Paste the JD so RolePrep can anchor the interview and scoring to the actual role."
+                    rows={7}
+                    className={`${fieldClassName} min-h-[180px] pl-11`}
                   />
                 </div>
               </label>
+
+              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Paperclip size={14} className="text-slate-300" />
+                  <h3 className="text-xs font-mono uppercase tracking-[0.2em] text-slate-400">Candidate Resume</h3>
+                </div>
+
+                <label className="block cursor-pointer rounded-2xl border border-dashed border-white/12 bg-[#0d1320] px-4 py-4 transition hover:border-accent/30 hover:bg-[#11182a]">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.md"
+                    className="hidden"
+                    onChange={async (event) => {
+                      const nextFile = event.target.files?.[0] ?? null;
+                      await handleResumeFileChange(nextFile);
+                    }}
+                  />
+                  {!resumeFile ? (
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.05]">
+                        <UploadCloud size={18} className="text-slate-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-100">Attach the candidate resume</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-400">
+                          We attach the resume context to the session payload so your interview setup stays candidate-specific.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10">
+                        <Paperclip size={18} className="text-accent" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-slate-100">{resumeFile.name}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {(resumeFile.size / 1024 / 1024).toFixed(2)} MB attached
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void handleResumeFileChange(null);
+                        }}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/6 text-slate-300 transition hover:bg-white/10"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                </label>
+
+                <label className="mt-4 block space-y-2">
+                  <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Resume Notes</span>
+                  <textarea
+                    value={resumeNotes}
+                    onChange={(event) => setResumeNotes(event.target.value)}
+                    placeholder="Key wins, tools, domain background, or anything you want the session context to remember."
+                    rows={4}
+                    className={`${fieldClassName} min-h-[110px]`}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
-          <div className="card-elevated border border-white/8 p-5">
-            <p className="mb-2 text-xs font-mono uppercase tracking-widest text-text-secondary">Live Session</p>
-            <p className="text-lg font-body font-medium leading-snug text-text-primary">
-              {currentSession ? currentSession.role : "No backend session started yet"}
-            </p>
+          <div className="space-y-5">
+            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+              <div className="mb-3 flex items-center gap-2">
+                <Target size={15} className="text-slate-300" />
+                <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Prompt</h2>
+              </div>
+              <p className="text-2xl leading-9 text-slate-50">{question}</p>
+              <p className="mt-4 text-sm leading-7 text-slate-400">
+                Submit an answer to update your transcript, analysis, and the next follow-up question from the live session.
+              </p>
+            </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-white/4 p-4">
-                <p className="text-xs font-mono uppercase tracking-widest text-text-secondary">Plan</p>
-                <p className="mt-2 text-lg font-display tracking-wider text-text-primary">
-                  {currentSession?.activeSessionPlan || currentSession?.selectedPlan || "N/A"}
-                </p>
+            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Layers3 size={15} className="text-slate-300" />
+                  <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Live Session Snapshot</h2>
+                </div>
+                <span className={`rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${getPlanAccent(currentPlan)}`}>
+                  {formatPlanLabel(currentPlan)}
+                </span>
               </div>
-              <div className="rounded-xl bg-white/4 p-4">
-                <p className="text-xs font-mono uppercase tracking-widest text-text-secondary">Credits</p>
-                <p className="mt-2 text-lg font-display tracking-wider text-text-primary">
-                  {currentSession?.sessionCredits ?? 0}
-                </p>
-              </div>
-              <div className="rounded-xl bg-white/4 p-4">
-                <p className="text-xs font-mono uppercase tracking-widest text-text-secondary">Questions</p>
-                <p className="mt-2 text-lg font-display tracking-wider text-text-primary">
-                  {currentSession?.questionCount ?? 0}
-                </p>
-              </div>
-              <div className="rounded-xl bg-white/4 p-4">
-                <p className="text-xs font-mono uppercase tracking-widest text-text-secondary">Stage</p>
-                <p className="mt-2 text-lg font-display tracking-wider text-text-primary">
-                  {currentSession?.currentStage || "setup"}
-                </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Current Stage</p>
+                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
+                    {formatStageLabel(currentSession?.currentStage || "setup")}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Answered</p>
+                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
+                    {currentSession?.questionCount ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Credits</p>
+                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
+                    {currentSession?.sessionCredits ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Status</p>
+                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
+                    {currentSession?.activeSession ? "In Progress" : "Standby"}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mb-6 rounded-xl border border-white/8 p-5 card-elevated">
-          <p className="mb-2 text-xs font-mono uppercase tracking-widest text-text-secondary">Interview Question</p>
-          <p className="text-lg font-body font-medium leading-snug text-text-primary">{question}</p>
-        </div>
+        <div className="mb-6 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+          <div className="mb-4 flex w-fit items-center gap-1 rounded-2xl bg-white/[0.04] p-1">
+            {(["record", "upload"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setInputMode(mode)}
+                className={`rounded-xl px-5 py-2 text-xs font-mono uppercase tracking-[0.18em] transition-all ${
+                  inputMode === mode ? "bg-[#12192a] text-slate-100 shadow-[0_10px_24px_rgba(0,0,0,0.18)]" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className="space-y-4">
-            <div className="flex w-fit items-center gap-1 rounded-lg bg-white/4 p-1">
-              {(["record", "upload"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setInputMode(mode)}
-                  className={`rounded-md px-4 py-1.5 text-xs font-mono capitalize transition-all duration-200 ${
-                    inputMode === mode ? "bg-bg-card text-text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-
-            {inputMode === "record" ? (
-              <AudioRecorder onAudioReady={handleRecordReady} onReset={handleRecorderReset} />
-            ) : (
-              <UploadBox onFileReady={handleFileReady} />
-            )}
-
-            {error && (
-              <p className="rounded-lg border border-danger/15 bg-danger/8 px-3 py-2 text-xs font-mono text-danger">{error}</p>
-            )}
-
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isAnalyzing || !audioBlob}
-              className={`flex w-full items-center justify-center gap-2.5 rounded-xl py-3.5 text-sm font-body font-medium transition-all duration-200 ${
-                isAnalyzing || !audioBlob
-                  ? "cursor-not-allowed bg-white/5 text-text-dim"
-                  : "glow-accent-sm bg-accent text-bg-base hover:bg-accent-dim active:scale-[0.99]"
-              }`}
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Analyzing response...
-                </>
+          <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="space-y-4">
+              {inputMode === "record" ? (
+                <AudioRecorder onAudioReady={handleRecordReady} onReset={handleRecorderReset} />
               ) : (
-                <>
-                  <Send size={15} />
-                  Start or Sync Session and Analyze
-                </>
+                <UploadBox onFileReady={handleFileReady} />
               )}
-            </button>
 
-            <div className="lg:hidden">
-              <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
-            </div>
-          </div>
+              {error && (
+                <p className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-rose-200">{error}</p>
+              )}
 
-          <div className="space-y-4">
-            <div className="hidden lg:block">
-              <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isAnalyzing || !audioBlob}
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-sm font-mono uppercase tracking-[0.2em] transition-all ${
+                  isAnalyzing || !audioBlob
+                    ? "cursor-not-allowed bg-white/6 text-slate-500"
+                    : "bg-[linear-gradient(90deg,#00ff88,#f4b44c)] text-[#07110c] shadow-[0_18px_40px_rgba(0,255,136,0.16)] hover:scale-[1.01]"
+                }`}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Analyzing
+                  </>
+                ) : (
+                  <>
+                    <Send size={15} />
+                    Analyze Answer
+                  </>
+                )}
+              </button>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-7 text-slate-400">
+                The studio keeps your role, JD, candidate context, stage, and current question aligned before each analysis pass.
+              </div>
             </div>
-            <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
+              <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
+            </div>
           </div>
         </div>
       </div>
