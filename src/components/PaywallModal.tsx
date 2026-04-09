@@ -17,8 +17,8 @@ interface Props {
 
 export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, fixed = false }: Props) {
   return (
-    <div className={`${fixed ? "fixed" : "absolute"} inset-0 z-20 flex items-center justify-center rounded-[28px] bg-[rgba(4,8,16,0.82)] p-4 backdrop-blur-md`}>
-      <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.98),rgba(8,11,20,0.98))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
+    <div className={`${fixed ? "fixed" : "absolute"} inset-0 z-[70] flex items-center justify-center bg-[rgba(4,8,16,0.9)] p-4 backdrop-blur-md`}>
+      <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.99),rgba(8,11,20,0.99))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-amber-200">
             <Lock size={18} />
@@ -26,6 +26,7 @@ export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, fi
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-amber-200">No sessions left</p>
             <h3 className="mt-2 font-display text-3xl leading-none tracking-[0.06em] text-slate-50">Unlock the next round</h3>
+            <p className="mt-3 text-base leading-7 text-slate-300">Pick a pack to continue the interview loop. Background actions stay locked until access is restored.</p>
           </div>
         </div>
 

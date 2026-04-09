@@ -41,6 +41,7 @@ function toneDot(tone: (typeof PREVIEW_STATES)[number]["tone"]) {
 
 export default function SimulationPreview() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(45);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -50,8 +51,24 @@ export default function SimulationPreview() {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (PREVIEW_STATES[activeIndex].tone !== "question") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setSecondsLeft((value) => (value <= 5 ? 45 : value - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [activeIndex]);
+
   const state = PREVIEW_STATES[activeIndex];
   const listening = state.tone === "listening";
+  const timerText =
+    state.tone === "question"
+      ? `00:${String(secondsLeft).padStart(2, "0")}`
+      : state.timer;
 
   return (
     <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.98),rgba(8,11,20,0.95))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:p-6">
@@ -61,7 +78,7 @@ export default function SimulationPreview() {
           <p className="text-sm uppercase tracking-[0.22em] text-slate-300">{state.label}</p>
         </div>
         <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm uppercase tracking-[0.18em] text-slate-100">
-          {state.timer}
+          {timerText}
         </div>
       </div>
 
@@ -71,8 +88,8 @@ export default function SimulationPreview() {
             <TimerReset size={15} />
             Timed round
           </div>
-          <div className={`flex h-11 w-11 items-center justify-center rounded-full border ${listening ? "border-accent/30 bg-accent/12" : "border-white/10 bg-white/[0.04]"}`}>
-            <Mic size={18} className={listening ? "text-accent" : "text-slate-300"} />
+          <div className={`flex h-11 w-11 items-center justify-center rounded-full border ${listening ? "border-accent/30 bg-accent/12 shadow-[0_0_0_10px_rgba(0,255,136,0.08)]" : "border-white/10 bg-white/[0.04]"}`}>
+            <Mic size={18} className={listening ? "animate-pulse text-accent" : "text-slate-300"} />
           </div>
         </div>
 

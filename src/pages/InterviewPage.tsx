@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Crown,
   Loader2,
@@ -72,6 +72,7 @@ function errorText(error: unknown) {
 }
 
 export default function InterviewPage() {
+  const navigate = useNavigate();
   const transcript = useStore((state) => state.transcript);
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
@@ -94,6 +95,7 @@ export default function InterviewPage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeExcerpt, setResumeExcerpt] = useState("");
   const [question, setQuestion] = useState(QUESTIONS[0]);
+  const [questionNumber, setQuestionNumber] = useState(1);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
@@ -106,6 +108,7 @@ export default function InterviewPage() {
   const isLocked = currentSession !== null && !premiumActive && credits <= 0;
   const countdown = Math.max(0, MAX_SECONDS - duration);
   const isMobileLayout = device.isMobile || device.isStandalone;
+  const isUrgent = uiState === "listening" && countdown <= 10;
   const statusText = useMemo(
     () =>
       uiState === "listening"
@@ -115,7 +118,7 @@ export default function InterviewPage() {
           : uiState === "feedback"
             ? "Feedback ready"
             : uiState === "next_question"
-              ? "Loading next question..."
+              ? "Moving to next question..."
               : "Ready when you are",
     [uiState],
   );
@@ -147,6 +150,13 @@ export default function InterviewPage() {
       setQuestion(currentSession.currentQuestion);
     }
   }, [currentSession?.currentQuestion]);
+
+  useEffect(() => {
+    if (uiState === "idle") {
+      const nextQuestionNumber = Math.min(5, Math.max(1, (currentSession?.questionCount ?? 0) + 1));
+      setQuestionNumber(nextQuestionNumber);
+    }
+  }, [currentSession?.questionCount, uiState]);
 
   useEffect(() => {
     if (recorderState === "recording") {
@@ -205,6 +215,7 @@ export default function InterviewPage() {
 
     try {
       await ensureSession();
+      const processingStartedAt = Date.now();
 
       const file =
         blob instanceof File
@@ -220,9 +231,15 @@ export default function InterviewPage() {
       });
 
       const normalized = normalizeAnalysisResponse(response);
+      const remainingDelay = Math.max(0, 1200 - (Date.now() - processingStartedAt));
+      if (remainingDelay > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, remainingDelay));
+      }
       setTranscript(normalized.transcript);
       setAnalysis(normalized.analysis);
-      setQuestion(normalized.analysis.followUp.question || QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
+      if (normalized.analysis.followUp.question) {
+        setQuestion(normalized.analysis.followUp.question);
+      }
       await refreshSessions();
       setUiState("feedback");
     } catch (submissionError) {
@@ -326,7 +343,7 @@ export default function InterviewPage() {
             <span className="text-sm text-slate-400">{planLabel(currentPlan)}</span>
           </div>
 
-          <div className="mx-auto rounded-full border border-accent/20 bg-accent/10 px-5 py-2 text-center text-base font-medium text-accent">
+          <div className={`mx-auto rounded-full border px-5 py-2 text-center text-base font-medium ${isUrgent ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-accent/20 bg-accent/10 text-accent"}`}>
             {uiState === "listening" ? timerLabel(countdown) : timerLabel(MAX_SECONDS)}
           </div>
 
@@ -461,13 +478,17 @@ export default function InterviewPage() {
                 statusText={statusText}
                 stageText={currentSession?.currentStage?.replace(/_/g, " ") || "setup"}
                 answeredCount={currentSession?.questionCount ?? 0}
+                questionNumber={questionNumber}
+                totalQuestions={5}
                 isProcessing={uiState === "processing"}
                 isLocked={isLocked}
+                isListening={uiState === "listening"}
+                isUrgent={isUrgent}
                 error={error}
                 notice={notice}
                 onUploadClick={() => fileInputRef.current?.click()}
               >
-                {isLocked && <PaywallModal plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} />}
+                {isLocked && <PaywallModal fixed plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} />}
               </InterviewLayout>
 
               <input
@@ -489,8 +510,8 @@ export default function InterviewPage() {
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="text-sm uppercase tracking-[0.2em] text-accent">Feedback ready</p>
-                    <h3 className="mt-2 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{analysis.score}</h3>
-                    <p className="mt-2 text-base text-slate-300">Interview response score out of 100</p>
+                    <h3 className="mt-2 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{analysis.score}/100</h3>
+                    <p className="mt-2 text-base text-slate-300">Score for question {questionNumber} of 5</p>
                   </div>
 
                   <button
@@ -498,6 +519,14 @@ export default function InterviewPage() {
                     onClick={() => {
                       setUiState("next_question");
                       window.setTimeout(() => {
+                        if (questionNumber >= 5) {
+                          setAnalysis(null);
+                          setTranscript("");
+                          navigate("/dashboard");
+                          return;
+                        }
+
+                        setQuestionNumber((value) => Math.min(5, value + 1));
                         setUiState("idle");
                         setAnalysis(null);
                         setTranscript("");
@@ -506,7 +535,7 @@ export default function InterviewPage() {
                     }}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
                   >
-                    Next question
+                    {questionNumber >= 5 ? "View dashboard" : "Next question"}
                     <RefreshCw size={18} />
                   </button>
                 </div>
@@ -515,22 +544,22 @@ export default function InterviewPage() {
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Strengths</p>
                     <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {(analysis.content.strengths.length ? analysis.content.strengths : ["Clear verbal structure", "Strong response momentum"])
-                        .slice(0, 2)
-                        .map((item) => (
-                          <li key={item}>- {item}</li>
-                        ))}
+                      {analysis.content.strengths.length > 0 ? (
+                        analysis.content.strengths.slice(0, 2).map((item) => <li key={item}>- {item}</li>)
+                      ) : (
+                        <li className="text-slate-400">Backend did not return strengths for this answer yet.</li>
+                      )}
                     </ul>
                   </div>
 
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Weak areas</p>
                     <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {(analysis.content.issues.length ? analysis.content.issues : ["Add more measurable outcomes", "Tighten the close"])
-                        .slice(0, 2)
-                        .map((item) => (
-                          <li key={item}>- {item}</li>
-                        ))}
+                      {analysis.content.issues.length > 0 ? (
+                        analysis.content.issues.slice(0, 2).map((item) => <li key={item}>- {item}</li>)
+                      ) : (
+                        <li className="text-slate-400">Backend did not return weak areas for this answer yet.</li>
+                      )}
                     </ul>
                   </div>
                 </div>
@@ -538,7 +567,7 @@ export default function InterviewPage() {
                 <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Coach summary</p>
                   <p className="mt-3 text-base leading-8 text-slate-100">
-                    {analysis.content.summary || analysis.followUp.hint || "Your answer is moving in the right direction. Tighten proof points and close harder."}
+                    {analysis.content.summary || analysis.followUp.hint || "Backend did not return a summary for this answer yet."}
                   </p>
                 </div>
               </div>

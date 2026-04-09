@@ -115,17 +115,42 @@ export default function DashboardPage() {
 
         {warning && <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-base text-rose-200">{warning}</div>}
 
-        <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
-            <div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Score graph</p></div>
-            <div className="mt-5"><ScoreTrendChart data={scoreSeries} height={mobileChartHeight} /></div>
+        <section className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Score graph</p></div>
+              <h2 className="mt-3 font-display text-3xl leading-none tracking-[0.05em] text-slate-50 sm:text-4xl">Your improvement curve</h2>
+            </div>
+            <p className="text-base text-slate-300">Each session stacks into a visible progression line so improvement feels measurable.</p>
           </div>
+          <div className="mt-6"><ScoreTrendChart data={scoreSeries} height={mobileChartHeight + 40} /></div>
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-5">
             <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
               <div className="flex items-center gap-2"><Sparkles size={18} className="text-amber-200" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Weak areas</p></div>
               <div className="mt-5 flex flex-wrap gap-2">{areas.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-slate-100">{tag}</span>)}</div>
             </div>
             <StageProgress session={currentSession} />
+          </div>
+          <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+            <div className="flex items-center gap-2"><Target size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Progress signal</p></div>
+            <p className="mt-4 text-lg leading-8 text-slate-100">Keep the loop moving: review the graph, target the weak tags, then jump into the next timed round.</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Current stage</p>
+                <p className="mt-3 text-lg text-slate-100">{stageLabel(currentSession?.currentStage || "setup")}</p>
+              </div>
+              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Streak</p>
+                <p className="mt-3 text-lg text-slate-100">{streak} day{streak === 1 ? "" : "s"}</p>
+              </div>
+              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Latest score</p>
+                <p className="mt-3 text-lg text-slate-100">{scoreSeries.at(-1)?.score ?? 0}</p>
+              </div>
+            </div>
           </div>
         </section>
 

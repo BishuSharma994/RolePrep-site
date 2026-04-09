@@ -119,6 +119,10 @@ export default function AnalysisPanel({ analysis, isLoading }: Props) {
           </div>
         )}
 
+        {content.issues.length === 0 && content.strengths.length === 0 && (
+          <p className="text-xs font-body text-text-dim">Detailed feedback was not returned by the backend for this answer.</p>
+        )}
+
         <div className="space-y-2 border-t border-white/5 pt-1">
           <MetricBar label="Clarity" value={content.clarity} color="#00ff88" />
           <MetricBar label="Relevance" value={content.relevance} color="#ffaa00" />
@@ -173,8 +177,10 @@ export default function AnalysisPanel({ analysis, isLoading }: Props) {
           <ChevronRight size={13} className="text-accent" />
           <h3 className="text-xs font-mono uppercase tracking-widest text-accent">Follow-up Question</h3>
         </div>
-        <p className="text-sm font-body leading-relaxed text-text-primary">{followUp.question}</p>
-        <p className="border-l-2 border-accent/30 pl-3 text-xs font-body italic text-text-secondary">{followUp.hint}</p>
+        <p className="text-sm font-body leading-relaxed text-text-primary">
+          {followUp.question || "No follow-up question was returned by the backend."}
+        </p>
+        {followUp.hint && <p className="border-l-2 border-accent/30 pl-3 text-xs font-body italic text-text-secondary">{followUp.hint}</p>}
       </div>
     </div>
   );

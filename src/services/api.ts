@@ -72,10 +72,26 @@ function extractIssues(rawFailures: unknown) {
     .filter(Boolean);
 }
 
-function extractStrengths(scoreEntries: Array<{ label: string; score: number; reason: string }>) {
-  return scoreEntries
-    .filter((entry) => entry.score >= 18)
-    .map((entry) => entry.reason || `${entry.label} is holding up well.`)
+function extractStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+
+      if (item && typeof item === "object") {
+        const candidate = (item as { text?: string; reason?: string; title?: string }).text
+          ?? (item as { text?: string; reason?: string; title?: string }).reason
+          ?? (item as { text?: string; reason?: string; title?: string }).title;
+        return typeof candidate === "string" ? candidate.trim() : "";
+      }
+
+      return "";
+    })
     .filter(Boolean);
 }
 
@@ -203,12 +219,14 @@ export function normalizeAnalysisResponse(payload: unknown) {
   const feedbackSummary = String(content.feedback_summary ?? analysis.feedback_summary ?? "");
   const followup = (content.followup as Record<string, unknown> | undefined) ?? {};
   const issues = extractIssues(content.failures);
-  const strengths = extractStrengths(scoreEntries);
+  const strengths = extractStringList(content.strengths ?? analysis.strengths);
+  const explicitIssues = extractStringList(content.issues ?? analysis.issues);
+  const followupHint = String(followup.hint ?? followup.coaching_hint ?? "");
 
   const normalized: AnalysisResult = {
     score: clampPercentage(overallScore),
     content: {
-      issues: issues.length ? issues : feedbackSummary ? [feedbackSummary] : [],
+      issues: explicitIssues.length ? explicitIssues : issues,
       strengths,
       clarity: clampPercentage((clarity.score / 25) * 100),
       relevance: clampPercentage((relevance.score / 25) * 100),
@@ -223,7 +241,7 @@ export function normalizeAnalysisResponse(payload: unknown) {
     },
     followUp: {
       question: String(followup.question ?? content.next_question ?? analysis.next_question ?? ""),
-      hint: feedbackSummary,
+      hint: followupHint,
     },
     raw: analysis,
   };

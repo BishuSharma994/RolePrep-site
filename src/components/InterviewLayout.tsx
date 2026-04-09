@@ -6,8 +6,12 @@ interface Props {
   statusText: string;
   stageText: string;
   answeredCount: number;
+  questionNumber: number;
+  totalQuestions: number;
   isProcessing: boolean;
   isLocked: boolean;
+  isListening: boolean;
+  isUrgent: boolean;
   error: string;
   notice: string;
   onUploadClick: () => void;
@@ -19,8 +23,12 @@ export default function InterviewLayout({
   statusText,
   stageText,
   answeredCount,
+  questionNumber,
+  totalQuestions,
   isProcessing,
   isLocked,
+  isListening,
+  isUrgent,
   error,
   notice,
   onUploadClick,
@@ -46,14 +54,22 @@ export default function InterviewLayout({
       </div>
 
       <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">
-        <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current question</p>
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+          <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current question</p>
+          <div className={`rounded-full border px-4 py-2 text-sm uppercase tracking-[0.18em] ${isUrgent ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : "border-white/10 bg-white/[0.04] text-slate-200"}`}>
+            Question {questionNumber} of {totalQuestions}
+          </div>
+        </div>
         <p className="mt-5 text-3xl leading-[3rem] text-slate-50 sm:text-4xl sm:leading-[3.6rem]">{question}</p>
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
           <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Status</p>
-          <p className="mt-3 text-lg text-slate-100">{statusText}</p>
+          <div className="mt-3 flex items-center gap-3">
+            <span className={`h-3 w-3 rounded-full ${isProcessing ? "animate-pulse bg-amber-300" : isListening ? "animate-pulse bg-accent" : isUrgent ? "bg-rose-400" : "bg-slate-500"}`} />
+            <p className="text-lg text-slate-100">{statusText}</p>
+          </div>
         </div>
         <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
           <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current stage</p>
@@ -66,9 +82,9 @@ export default function InterviewLayout({
       </div>
 
       {isProcessing && (
-        <div className="mt-5 flex items-center gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 text-base text-slate-100">
+        <div className="mt-5 flex items-center gap-3 rounded-[24px] border border-amber-300/20 bg-amber-300/10 px-4 py-4 text-base text-slate-100">
           <Loader2 size={18} className="animate-spin text-accent" />
-          Processing your answer, scoring it, and generating the next question.
+          Analyzing response...
         </div>
       )}
 
