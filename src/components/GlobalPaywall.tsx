@@ -11,7 +11,6 @@ const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: st
 
 export default function GlobalPaywall() {
   const isPaywallOpen = useStore((state) => state.isPaywallOpen);
-  const closePaywall = useStore((state) => state.closePaywall);
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
   const userId = getOrCreateLocalUserId();
 
@@ -35,8 +34,8 @@ export default function GlobalPaywall() {
   };
 
   return (
-    <div onClick={closePaywall}>
-      <div onClick={(event) => event.stopPropagation()}>
+    <div>
+      <div>
         <PaywallModal plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} fixed />
       </div>
     </div>

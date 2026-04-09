@@ -24,7 +24,6 @@ import {
   type PlanType,
 } from "../services/api";
 import InterviewLayout from "../components/InterviewLayout";
-import PaywallModal from "../components/PaywallModal";
 import { useStore } from "../store";
 
 type UiState = "idle" | "listening" | "processing" | "feedback" | "next_question";
@@ -71,6 +70,40 @@ function errorText(error: unknown) {
   return error instanceof Error && error.message ? error.message : "Something went wrong. Please try again.";
 }
 
+function isNoCreditsError(error: unknown) {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return false;
+  }
+
+  const response = error.response;
+  if (!response || typeof response !== "object" || !("data" in response)) {
+    return false;
+  }
+
+  const data = response.data as {
+    code?: string;
+    detail?: string | { code?: string; reason?: string; message?: string };
+  };
+
+  const directCode = typeof data.code === "string" ? data.code.toUpperCase() : "";
+  if (directCode === "NO_CREDITS") {
+    return true;
+  }
+
+  if (data.detail && typeof data.detail === "object") {
+    const nestedCode = typeof data.detail.code === "string" ? data.detail.code.toUpperCase() : "";
+    if (nestedCode === "NO_CREDITS") {
+      return true;
+    }
+
+    const nestedText = `${data.detail.reason ?? ""} ${data.detail.message ?? ""}`.toLowerCase();
+    return nestedText.includes("no credits") || nestedText.includes("no sessions left");
+  }
+
+  const detailText = typeof data.detail === "string" ? data.detail.toLowerCase() : "";
+  return detailText.includes("no credits") || detailText.includes("no sessions left");
+}
+
 export default function InterviewPage() {
   const navigate = useNavigate();
   const transcript = useStore((state) => state.transcript);
@@ -84,6 +117,7 @@ export default function InterviewPage() {
   const setAnalysis = useStore((state) => state.setAnalysis);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
   const setSessions = useStore((state) => state.setSessions);
+  const openPaywall = useStore((state) => state.openPaywall);
   const device = useDeviceProfile();
   const { state: recorderState, audioBlob, duration, errorMsg, start, stop, reset } = useAudioRecorder();
 
@@ -183,24 +217,32 @@ export default function InterviewPage() {
       return currentSession;
     }
 
-    const session = await createSession({
-      userId,
-      role: role.trim(),
-      jdText: jdText.trim(),
-      resumePath: resumeFile?.name,
-      parserData: {
-        candidate_profile: {
-          resume_file_name: resumeFile?.name ?? null,
-          resume_notes: resumeNotes.trim() || null,
-          resume_text_excerpt: resumeExcerpt || null,
+    try {
+      const session = await createSession({
+        userId,
+        role: role.trim(),
+        jdText: jdText.trim(),
+        resumePath: resumeFile?.name,
+        parserData: {
+          candidate_profile: {
+            resume_file_name: resumeFile?.name ?? null,
+            resume_notes: resumeNotes.trim() || null,
+            resume_text_excerpt: resumeExcerpt || null,
+          },
         },
-      },
-    });
+      });
 
-    setCurrentSession(session);
-    setSessions([session, ...sessions.filter((entry) => entry.sessionId !== session.sessionId)]);
-    setSessionContextKey(contextKey);
-    return session;
+      setCurrentSession(session);
+      setSessions([session, ...sessions.filter((entry) => entry.sessionId !== session.sessionId)]);
+      setSessionContextKey(contextKey);
+      return session;
+    } catch (sessionError) {
+      if (isNoCreditsError(sessionError)) {
+        openPaywall();
+      }
+
+      throw sessionError;
+    }
   }
 
   async function submitResponse(blob: Blob | File) {
@@ -243,6 +285,12 @@ export default function InterviewPage() {
       await refreshSessions();
       setUiState("feedback");
     } catch (submissionError) {
+      if (isNoCreditsError(submissionError)) {
+        openPaywall();
+        setUiState("idle");
+        return;
+      }
+
       setError(errorText(submissionError));
       setUiState("idle");
     } finally {
@@ -282,7 +330,11 @@ export default function InterviewPage() {
   }, [currentPlan]);
 
   async function handleMicButton() {
-    if (isLocked || uiState === "processing") return;
+    if (uiState === "processing") return;
+    if (isLocked) {
+      openPaywall();
+      return;
+    }
     if (recorderState === "recording") return stop();
     if (!role.trim()) return setError("Set your target role before starting the interview.");
     if (!jdText.trim()) return setError("Paste the job description before starting the interview.");
@@ -510,9 +562,7 @@ export default function InterviewPage() {
                 error={error}
                 notice={notice}
                 onUploadClick={() => fileInputRef.current?.click()}
-              >
-                {isLocked && <PaywallModal fixed plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} />}
-              </InterviewLayout>
+              />
 
               <input
                 ref={fileInputRef}
