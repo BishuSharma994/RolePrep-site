@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, Share2, X } from "lucide-react";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms?: string[];
@@ -19,6 +20,7 @@ function isIOS() {
 }
 
 export default function InstallPrompt() {
+  const device = useDeviceProfile();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(() => isStandaloneMode());
   const [isDismissed, setIsDismissed] = useState(false);
@@ -73,7 +75,7 @@ export default function InstallPrompt() {
   };
 
   return (
-    <div className="fixed inset-x-4 bottom-4 z-50 sm:inset-x-auto sm:right-6 sm:w-[360px]">
+    <div className={`fixed z-50 ${device.isMobile ? "inset-x-3 bottom-3" : "inset-x-4 bottom-4 sm:inset-x-auto sm:right-6 sm:w-[360px]"}`}>
       <div className="rounded-[24px] border border-white/12 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.96))] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.38)] backdrop-blur-xl">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ArrowLeft, Calendar, Clock3, Crown, Gauge, Layers3, Sparkles, TrendingUp } from "lucide-react";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { useStore, type Session } from "../store";
 import { getOrCreateLocalUserId, getSessions } from "../services/api";
 import ScoreCard from "../components/ScoreCard";
@@ -165,6 +166,7 @@ function CustomTooltip({
 
 export default function DashboardPage() {
   const { sessions, setSessions } = useStore();
+  const device = useDeviceProfile();
   const [userId] = useState(() => getOrCreateLocalUserId());
   const [isLoading, setIsLoading] = useState(true);
   const [warning, setWarning] = useState("");
@@ -201,6 +203,11 @@ export default function DashboardPage() {
   }, [setSessions, userId]);
 
   const displaySessions: Session[] = sessions;
+  const isCompactLayout = device.isMobile || device.isStandalone;
+  const pageTitle = isCompactLayout ? "Dashboard" : "Progress Dashboard";
+  const pageCopy = isCompactLayout
+    ? "Live session state, credits, and progress tuned for the phone view."
+    : "A clearer command view of plan status, session momentum, stage completion, and answer performance across your current interview track.";
   const primarySession = displaySessions[0] ?? null;
   const flattenedScores = displaySessions.flatMap((session) => session.scores).map((score) => Math.round(score * 10));
   const averageSessionScore = flattenedScores.length
@@ -227,11 +234,11 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="min-h-dvh bg-[#070b14] noise-overlay">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <div className="mb-6 flex items-center justify-between rounded-[28px] border border-white/10 bg-[#101726] p-6">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
+          <div className="mb-5 flex items-center justify-between rounded-[24px] border border-white/10 bg-[#101726] p-5 sm:mb-6 sm:rounded-[28px] sm:p-6">
             <div>
               <p className="text-xs font-mono uppercase tracking-[0.3em] text-accent">RolePrep</p>
-              <h1 className="mt-2 font-display text-4xl tracking-[0.08em] text-slate-50">Dashboard</h1>
+              <h1 className="mt-2 font-display text-3xl tracking-[0.06em] text-slate-50 sm:text-4xl sm:tracking-[0.08em]">Dashboard</h1>
             </div>
 
             <Link
@@ -261,16 +268,14 @@ export default function DashboardPage() {
         <div className="absolute right-0 top-16 h-96 w-96 rounded-full bg-amber-400/8 blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl animate-fade-in space-y-5 px-4 py-6 sm:px-6">
-        <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-            <div className="flex items-start justify-between gap-4">
+      <div className="relative mx-auto max-w-7xl animate-fade-in space-y-4 px-4 py-5 sm:space-y-5 sm:px-6 sm:py-6">
+        <div className={`grid gap-4 ${isCompactLayout ? "" : "lg:grid-cols-[1.15fr_0.85fr]"}`}>
+          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-mono uppercase tracking-[0.32em] text-accent">RolePrep</p>
-                <h1 className="mt-3 font-display text-5xl tracking-[0.08em] text-slate-50 sm:text-6xl">Progress Dashboard</h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-                  A clearer command view of plan status, session momentum, stage completion, and answer performance across your current interview track.
-                </p>
+                <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl sm:tracking-[0.08em] lg:text-6xl">{pageTitle}</h1>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">{pageCopy}</p>
               </div>
 
               <Link
@@ -282,31 +287,31 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-4">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:grid-cols-4">
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Live Sessions</p>
-                <p className="mt-3 text-3xl font-display tracking-[0.08em] text-slate-50">{displaySessions.length}</p>
+                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{displaySessions.length}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Avg Score</p>
-                <p className="mt-3 text-3xl font-display tracking-[0.08em] text-slate-50">{averageSessionScore}</p>
+                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{averageSessionScore}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Best</p>
-                <p className="mt-3 text-3xl font-display tracking-[0.08em] text-slate-50">{bestSessionScore}</p>
+                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{bestSessionScore}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Questions</p>
-                <p className="mt-3 text-3xl font-display tracking-[0.08em] text-slate-50">{totalQuestions}</p>
+                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{totalQuestions}</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Status</p>
-                <h2 className="mt-2 font-display text-3xl tracking-[0.08em] text-slate-50">Live Pulse</h2>
+                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Live Pulse</h2>
               </div>
               <Sparkles size={18} className="text-amber-300" />
             </div>
@@ -384,14 +389,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+        <div className={`grid gap-4 sm:gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[1.05fr_0.95fr]"}`}>
+          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
             <div className="mb-5 flex items-center gap-2">
               <TrendingUp size={15} className="text-slate-300" />
               <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Performance Trend</h2>
             </div>
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={isCompactLayout ? 180 : 220}>
                 <LineChart data={chartData}>
                   <XAxis
                     dataKey="date"
@@ -418,14 +423,14 @@ export default function DashboardPage() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[260px] items-center justify-center text-center text-sm leading-7 text-slate-400">
+              <div className={`flex items-center justify-center text-center text-sm leading-7 text-slate-400 ${isCompactLayout ? "h-[180px]" : "h-[220px] sm:h-[260px]"}`}>
                 Complete a scored answer to light up your trend line.
               </div>
             )}
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
               <div className="mb-5 flex items-center gap-2">
                 <Gauge size={15} className="text-slate-300" />
                 <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Stage Coverage</h2>
@@ -441,7 +446,7 @@ export default function DashboardPage() {
                       <div
                         className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#4a90e2)]"
                         style={{
-                          width: `${displaySessions.length ? Math.max(8, Math.round((entry.count / displaySessions.length) * 100)) : 0}%`,
+                          width: `${displaySessions.length ? Math.round((entry.count / displaySessions.length) * 100) : 0}%`,
                         }}
                       />
                     </div>
@@ -450,12 +455,12 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
               <div className="mb-5 flex items-center gap-2">
                 <Layers3 size={15} className="text-slate-300" />
                 <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Question</h2>
               </div>
-              <p className="text-lg leading-8 text-slate-50">
+              <p className="text-base leading-8 text-slate-50 sm:text-lg">
                 {primarySession?.currentQuestion || "Start an interview round to see the live current question here."}
               </p>
             </div>
@@ -466,7 +471,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Session Timeline</p>
-              <h2 className="mt-2 font-display text-3xl tracking-[0.08em] text-slate-50">Progress by Session</h2>
+              <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Progress by Session</h2>
             </div>
           </div>
 
@@ -484,11 +489,11 @@ export default function DashboardPage() {
             return (
               <div
                 key={session.sessionId}
-                className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]"
+                className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6"
               >
                 <div className="grid gap-5 lg:grid-cols-[0.2fr_0.8fr]">
                   <div className="flex items-start justify-center lg:justify-start">
-                    <ScoreCard score={score} size="md" />
+                    <ScoreCard score={score} size={isCompactLayout ? "sm" : "md"} />
                   </div>
 
                   <div className="space-y-4">
@@ -528,7 +533,7 @@ export default function DashboardPage() {
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                      <div className={`grid gap-2 ${isCompactLayout ? "grid-cols-2" : "sm:grid-cols-3 lg:grid-cols-6"}`}>
                         {STAGE_ORDER.map((stage, index) => (
                           <div
                             key={`${session.sessionId}-${stage}`}

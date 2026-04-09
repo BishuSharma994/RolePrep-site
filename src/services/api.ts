@@ -40,6 +40,8 @@ interface CreateSessionPayload {
   jdPath?: string;
 }
 
+export type PlanType = "session_10" | "session_29" | "premium";
+
 function clampPercentage(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -153,6 +155,18 @@ export async function getSessions(userId: string) {
 
   const sessions = Array.isArray(response.data?.sessions) ? response.data.sessions : [];
   return sessions.map((session: BackendSessionPayload) => normalizeSession(session));
+}
+
+export async function createPaymentLink(userId: string, planType: PlanType) {
+  const { data } = await API.post("/payments/link", {
+    user_id: userId,
+    plan_type: planType,
+  });
+
+  return {
+    status: String(data?.status ?? ""),
+    paymentLink: String(data?.payment_link ?? ""),
+  };
 }
 
 export function normalizeAnalysisResponse(payload: unknown) {

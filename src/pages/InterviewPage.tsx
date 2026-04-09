@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowRight,
   BarChart3,
   Briefcase,
+  Check,
   CreditCard,
   Crown,
   FileText,
@@ -20,8 +22,17 @@ import AudioRecorder from "../components/AudioRecorder";
 import UploadBox from "../components/UploadBox";
 import TranscriptPanel from "../components/TranscriptPanel";
 import AnalysisPanel from "../components/AnalysisPanel";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { type Session, useStore } from "../store";
-import { analyzeAudio, createSession, getOrCreateLocalUserId, getSessions, normalizeAnalysisResponse } from "../services/api";
+import {
+  analyzeAudio,
+  createPaymentLink,
+  createSession,
+  getOrCreateLocalUserId,
+  getSessions,
+  normalizeAnalysisResponse,
+  type PlanType,
+} from "../services/api";
 
 const SAMPLE_QUESTIONS = [
   "Tell me about a time you led a project under pressure.",
@@ -32,6 +43,31 @@ const SAMPLE_QUESTIONS = [
 ];
 
 const STAGE_ORDER = ["setup", "resume_session", "warmup", "core", "followup", "complete"];
+const PLAN_OPTIONS: Array<{
+  planType: PlanType;
+  label: string;
+  price: string;
+  description: string;
+}> = [
+  {
+    planType: "session_10",
+    label: "Single Session",
+    price: "Rs 10",
+    description: "Unlock one guided interview session and test the credit flow.",
+  },
+  {
+    planType: "session_29",
+    label: "Session Pack",
+    price: "Rs 29",
+    description: "Best for testing session credits and repeated practice rounds.",
+  },
+  {
+    planType: "premium",
+    label: "Premium",
+    price: "Rs 99",
+    description: "Unlock the premium plan path and subscription-style access.",
+  },
+];
 
 function getInitialValue(key: string) {
   return window.localStorage.getItem(key) ?? "";
@@ -166,6 +202,7 @@ export default function InterviewPage() {
     addSession,
     setIsAnalyzing,
   } = useStore();
+  const device = useDeviceProfile();
 
   const [userId] = useState(() => getOrCreateLocalUserId());
   const [role, setRole] = useState(() => getInitialValue("roleprep_role"));
@@ -177,9 +214,23 @@ export default function InterviewPage() {
   const [question, setQuestion] = useState(SAMPLE_QUESTIONS[0]);
   const [inputMode, setInputMode] = useState<"record" | "upload">("record");
   const [error, setError] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const [isRefreshingSession, setIsRefreshingSession] = useState(false);
+  const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
   const [sessionContextKey, setSessionContextKey] = useState("");
 
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
+  const isCompactLayout = device.isMobile || device.isStandalone;
+  const heroTitle = isCompactLayout ? "Interview Studio" : "Premium Interview Studio";
+  const heroCopy = isCompactLayout
+    ? "A cleaner mobile command center for live practice, billing, and stage-aware feedback."
+    : "Build a sharper answer flow with a cleaner command center, a visible stage ladder, and live plan status while every answer syncs into your backend session.";
+  const sessionIdentityCopy = isCompactLayout
+    ? "This device is mapped to your backend user."
+    : "Private browser ID connected to your live backend user.";
+  const billingCopy = isCompactLayout
+    ? "Start payment, return here, then refresh to pull credits and plan state."
+    : "Start a Razorpay checkout and then refresh this session after payment.";
   const sessionProgress = useMemo(
     () => getSessionProgress(currentSession, Boolean(analysis)),
     [analysis, currentSession],
@@ -247,6 +298,19 @@ export default function InterviewPage() {
     }
   };
 
+  const handleRefreshSession = async () => {
+    setPaymentError("");
+    setIsRefreshingSession(true);
+
+    try {
+      await refreshSessions();
+    } catch (refreshError) {
+      setPaymentError(getErrorMessage(refreshError));
+    } finally {
+      setIsRefreshingSession(false);
+    }
+  };
+
   const ensureSession = async () => {
     const currentContextKey = `${role.trim()}::${jdText.trim()}`;
     if (
@@ -306,6 +370,25 @@ export default function InterviewPage() {
     }
 
     setResumeExcerpt("");
+  };
+
+  const handleCheckout = async (planType: PlanType) => {
+    setPaymentError("");
+    setActiveCheckoutPlan(planType);
+
+    try {
+      const { paymentLink } = await createPaymentLink(userId, planType);
+
+      if (!paymentLink) {
+        throw new Error("Payment link was not returned by the backend.");
+      }
+
+      window.location.href = paymentLink;
+    } catch (checkoutError) {
+      setPaymentError(getErrorMessage(checkoutError));
+    } finally {
+      setActiveCheckoutPlan(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -368,65 +451,63 @@ export default function InterviewPage() {
         <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl animate-fade-in px-4 py-6 sm:px-6">
-        <div className="mb-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-            <div className="mb-10 flex items-start justify-between gap-4">
+      <div className="relative mx-auto max-w-7xl animate-fade-in px-4 py-5 sm:px-6 sm:py-6">
+        <div className="mb-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
+            <div className="mb-7 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-mono uppercase tracking-[0.35em] text-accent">RolePrep</p>
-                <h1 className="mt-3 font-display text-5xl leading-none tracking-[0.08em] text-slate-50 sm:text-6xl">
-                  Premium Interview Studio
+                <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl sm:tracking-[0.08em] lg:text-6xl">
+                  {heroTitle}
                 </h1>
               </div>
 
-              <div className={`rounded-full border px-3 py-1 text-xs font-mono uppercase tracking-[0.25em] ${getPlanAccent(currentPlan)}`}>
+              <div className={`w-fit rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] sm:text-xs sm:tracking-[0.25em] ${getPlanAccent(currentPlan)}`}>
                 {formatPlanLabel(currentPlan)}
               </div>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
+            <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr] sm:gap-5">
               <div>
-                <p className="max-w-2xl text-base leading-7 text-slate-300">
-                  Build a sharper answer flow with a cleaner command center, a visible stage ladder, and live plan status while every answer syncs into your backend session.
-                </p>
+                <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">{heroCopy}</p>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                     <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Current Stage</p>
-                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">
+                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">
                       {formatStageLabel(currentSession?.currentStage || "setup")}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                     <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Progress</p>
-                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">{sessionProgress}%</p>
+                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">{sessionProgress}%</p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="col-span-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:col-span-1">
                     <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Questions</p>
-                    <p className="mt-3 text-xl font-display tracking-[0.08em] text-slate-100">
+                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">
                       {currentSession?.questionCount ?? 0}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5 backdrop-blur-xl">
+              <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 backdrop-blur-xl sm:rounded-[24px] sm:p-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Session Identity</p>
-                    <p className="mt-2 text-sm text-slate-300">Private browser ID connected to your live backend user.</p>
+                    <p className="mt-2 text-xs leading-6 text-slate-300 sm:text-sm">{sessionIdentityCopy}</p>
                   </div>
                   <Sparkles size={18} className="text-amber-300" />
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-sm tracking-[0.18em] text-slate-100">
+                <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-xs tracking-[0.18em] text-slate-100 sm:text-sm">
                   {userId.slice(0, 8)}...{userId.slice(-4)}
                 </div>
 
                 <div className="mt-4 flex flex-col gap-3">
                   <Link
                     to="/dashboard"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-mono uppercase tracking-[0.2em] text-[#07110c] transition hover:bg-accent-dim"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-xs font-mono uppercase tracking-[0.2em] text-[#07110c] transition hover:bg-accent-dim sm:text-sm"
                   >
                     <BarChart3 size={16} />
                     Open Dashboard
@@ -439,11 +520,11 @@ export default function InterviewPage() {
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
+          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-mono uppercase tracking-[0.25em] text-slate-400">Access & Billing</p>
-                <h2 className="mt-2 font-display text-3xl tracking-[0.08em] text-slate-50">Plan Command</h2>
+                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Plan Command</h2>
               </div>
               <Crown size={20} className="text-amber-300" />
             </div>
@@ -454,10 +535,71 @@ export default function InterviewPage() {
                   <p className="text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Selected Plan</p>
                   <CreditCard size={15} className="text-amber-200" />
                 </div>
-                <p className="mt-3 text-2xl font-display tracking-[0.08em] text-slate-50">{formatPlanLabel(currentPlan)}</p>
+                <p className="mt-3 text-xl font-display tracking-[0.06em] text-slate-50 sm:text-2xl sm:tracking-[0.08em]">{formatPlanLabel(currentPlan)}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
                   Credits: <span className="text-slate-100">{currentSession?.sessionCredits ?? 0}</span>
                 </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Upgrade Options</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">{billingCopy}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleRefreshSession()}
+                    disabled={isRefreshingSession}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-slate-200 transition hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isRefreshingSession ? "Refreshing" : "Refresh"}
+                  </button>
+                </div>
+
+                <div className="grid gap-3">
+                  {PLAN_OPTIONS.map((plan) => (
+                    <div key={plan.planType} className="rounded-2xl border border-white/10 bg-[#0d1320] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-100">{plan.label}</p>
+                          <p className="mt-1 text-xs font-mono uppercase tracking-[0.16em] text-accent">{plan.price}</p>
+                        </div>
+                        {currentPlan === plan.planType && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-accent">
+                            <Check size={12} />
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-xs leading-6 text-slate-400">{plan.description}</p>
+                      <button
+                        type="button"
+                        onClick={() => void handleCheckout(plan.planType)}
+                        disabled={activeCheckoutPlan !== null}
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] text-[#07110c] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {activeCheckoutPlan === plan.planType ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            Opening
+                          </>
+                        ) : (
+                          <>
+                            Pay & Activate
+                            <ArrowRight size={14} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {paymentError && (
+                  <p className="mt-3 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-rose-200">
+                    {paymentError}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -501,8 +643,8 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+        <div className={`mb-5 grid gap-4 sm:gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[1.1fr_0.9fr]"}`}>
+          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
             <div className="mb-5 flex items-center gap-2">
               <Briefcase size={15} className="text-slate-300" />
               <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Session Setup</h2>
@@ -537,10 +679,10 @@ export default function InterviewPage() {
                 </div>
               </label>
 
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 sm:rounded-[24px]">
                 <div className="mb-3 flex items-center gap-2">
                   <Paperclip size={14} className="text-slate-300" />
-                  <h3 className="text-xs font-mono uppercase tracking-[0.2em] text-slate-400">Candidate Resume</h3>
+                  <h3 className="text-xs font-mono uppercase tracking-[0.2em] text-slate-400">Your Resume</h3>
                 </div>
 
                 <label className="block cursor-pointer rounded-2xl border border-dashed border-white/12 bg-[#0d1320] px-4 py-4 transition hover:border-accent/30 hover:bg-[#11182a]">
@@ -559,9 +701,9 @@ export default function InterviewPage() {
                         <UploadCloud size={18} className="text-slate-300" />
                       </div>
                       <div>
-                        <p className="text-sm text-slate-100">Attach the candidate resume</p>
+                        <p className="text-sm text-slate-100">Attach your resume</p>
                         <p className="mt-1 text-xs leading-5 text-slate-400">
-                          We attach the resume context to the session payload so your interview setup stays candidate-specific.
+                          We attach your resume context to the session payload so your interview setup stays personal and role-specific.
                         </p>
                       </div>
                     </div>
@@ -604,19 +746,21 @@ export default function InterviewPage() {
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+          <div className={`space-y-4 ${isCompactLayout ? "" : "sm:space-y-5"}`}>
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
               <div className="mb-3 flex items-center gap-2">
                 <Target size={15} className="text-slate-300" />
                 <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Prompt</h2>
               </div>
-              <p className="text-2xl leading-9 text-slate-50">{question}</p>
+              <p className="text-xl leading-8 text-slate-50 sm:text-2xl sm:leading-9">{question}</p>
               <p className="mt-4 text-sm leading-7 text-slate-400">
-                Submit an answer to update your transcript, analysis, and the next follow-up question from the live session.
+                {isCompactLayout
+                  ? "Submit an answer to update the session and get the next follow-up."
+                  : "Submit an answer to update your transcript, analysis, and the next follow-up question from the live session."}
               </p>
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers3 size={15} className="text-slate-300" />
@@ -657,7 +801,7 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        <div className="mb-6 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.3)]">
+        <div className="mb-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:mb-6 sm:rounded-[28px] sm:p-6">
           <div className="mb-4 flex w-fit items-center gap-1 rounded-2xl bg-white/[0.04] p-1">
             {(["record", "upload"] as const).map((mode) => (
               <button
@@ -673,7 +817,7 @@ export default function InterviewPage() {
             ))}
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className={`grid gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[0.95fr_1.05fr]"}`}>
             <div className="space-y-4">
               {inputMode === "record" ? (
                 <AudioRecorder onAudioReady={handleRecordReady} onReset={handleRecorderReset} />
@@ -709,14 +853,21 @@ export default function InterviewPage() {
               </button>
 
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-7 text-slate-400">
-                The studio keeps your role, JD, candidate context, stage, and current question aligned before each analysis pass.
+                The studio keeps your role, JD, resume context, stage, and current question aligned before each analysis pass.
               </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
-              <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
-            </div>
+            {isCompactLayout ? (
+              <div className="space-y-4">
+                <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
+                <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
+                <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
+              </div>
+            )}
           </div>
         </div>
       </div>
