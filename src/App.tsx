@@ -174,11 +174,7 @@ function App() {
             />
             <Route
               path="/resume"
-              element={(
-                <ProtectedRoute>
-                  <ResumePage />
-                </ProtectedRoute>
-              )}
+              element={<ResumePage />}
             />
           </Route>
         </Routes>

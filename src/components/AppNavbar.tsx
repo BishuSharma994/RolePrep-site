@@ -65,12 +65,6 @@ export default function AppNavbar() {
           <NavLink
             to="/resume"
             className={({ isActive }) => navClassName(isActive)}
-            onClick={(event) => {
-              if (!authToken) {
-                event.preventDefault();
-                handleProtectedNavigation("/resume");
-              }
-            }}
           >
             Resume
           </NavLink>
@@ -132,13 +126,7 @@ export default function AppNavbar() {
             <NavLink
               to="/resume"
               className={() => navClassName(location.pathname === "/resume")}
-              onClick={(event) => {
-                if (!authToken) {
-                  event.preventDefault();
-                  handleProtectedNavigation("/resume");
-                  return;
-                }
-
+              onClick={() => {
                 setIsOpen(false);
               }}
             >

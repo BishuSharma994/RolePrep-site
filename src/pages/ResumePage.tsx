@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileLock2, FileText, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { Download, FileText, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import SupportFooter from "../components/SupportFooter";
 import { generateResume, getResume, improveResume } from "../services/api";
 import { useStore } from "../store";
@@ -10,7 +10,6 @@ type ResumeSource = "raw_text" | "session";
 const JD_STORAGE_KEY = "roleprep_resume_workspace_jd";
 const RAW_TEXT_STORAGE_KEY = "roleprep_resume_workspace_raw_text";
 const SOURCE_STORAGE_KEY = "roleprep_resume_workspace_source";
-const PAID_SESSION_PLANS = new Set(["session_10", "session_29", "premium"]);
 
 function getErrorDetail(error: unknown) {
   if (
@@ -105,10 +104,9 @@ function PreviewSection({ label, items }: { label: string; items: { title: strin
 
 export default function ResumePage() {
   const activeUserId = useStore((state) => state.activeUserId);
+  const authenticatedUserId = useStore((state) => state.authenticatedUserId);
   const authenticatedEmail = useStore((state) => state.authenticatedEmail);
   const currentSession = useStore((state) => state.currentSession);
-  const credits = useStore((state) => state.credits);
-  const premiumActive = useStore((state) => state.premiumActive);
   const openPaywall = useStore((state) => state.openPaywall);
   const [jdText, setJdText] = useState(() => window.localStorage.getItem(JD_STORAGE_KEY) ?? "");
   const [rawText, setRawText] = useState(() => window.localStorage.getItem(RAW_TEXT_STORAGE_KEY) ?? "");
@@ -122,12 +120,9 @@ export default function ResumePage() {
   const [error, setError] = useState("");
 
   const hasSessionSource = Boolean(currentSession?.sessionId);
+  const effectiveUserId = authenticatedUserId || activeUserId;
   const effectiveSource = source === "session" && hasSessionSource ? "session" : "raw_text";
   const preview = resumeResponse?.resumeJson ?? null;
-  const hasPaidSessionEntitlement = credits > 0
-    || PAID_SESSION_PLANS.has(currentSession?.selectedPlan ?? "")
-    || PAID_SESSION_PLANS.has(currentSession?.activeSessionPlan ?? "");
-  const hasResumeAccess = premiumActive || hasPaidSessionEntitlement;
   const createdAtLabel = useMemo(
     () => (resumeResponse?.createdAt ? new Date(resumeResponse.createdAt).toLocaleString() : ""),
     [resumeResponse?.createdAt],
@@ -151,24 +146,7 @@ export default function ResumePage() {
     }
   }, [currentSession?.jdText, jdText]);
 
-  useEffect(() => {
-    if (!hasResumeAccess) {
-      setResumeResponse(null);
-    }
-  }, [hasResumeAccess]);
-
-  const openResumeUpgrade = (message = "Resume Intelligence is available on paid plans only.") => {
-    setError(message);
-    setNotice("");
-    openPaywall();
-  };
-
   const runGenerate = async () => {
-    if (!hasResumeAccess) {
-      openResumeUpgrade();
-      return;
-    }
-
     if (!jdText.trim()) {
       setError("Paste the job description before generating the resume.");
       return;
@@ -190,7 +168,7 @@ export default function ResumePage() {
 
     try {
       const response = await generateResume({
-        userId: activeUserId || null,
+        userId: effectiveUserId || null,
         jdText: jdText.trim(),
         rawText: effectiveSource === "raw_text" ? rawText.trim() : null,
         sessionId: effectiveSource === "session" ? currentSession?.sessionId ?? null : null,
@@ -199,7 +177,9 @@ export default function ResumePage() {
       setNotice(`Resume generated for ${response.userId}.`);
     } catch (resumeError) {
       if (isResumePlanRequiredError(resumeError)) {
-        openResumeUpgrade(errorText(resumeError));
+        setError(errorText(resumeError));
+        setNotice("");
+        openPaywall();
         return;
       }
 
@@ -210,11 +190,6 @@ export default function ResumePage() {
   };
 
   const runImprove = async () => {
-    if (!hasResumeAccess) {
-      openResumeUpgrade();
-      return;
-    }
-
     if (!jdText.trim()) {
       setError("Paste the job description before improving the resume.");
       return;
@@ -236,7 +211,7 @@ export default function ResumePage() {
 
     try {
       const response = await improveResume({
-        userId: activeUserId || null,
+        userId: effectiveUserId || null,
         jdText: jdText.trim(),
         resumeJson: resumeResponse?.resumeJson ?? null,
         rawText: !resumeResponse && effectiveSource === "raw_text" ? rawText.trim() : null,
@@ -246,7 +221,9 @@ export default function ResumePage() {
       setNotice("Resume improved with the latest backend recommendations.");
     } catch (resumeError) {
       if (isResumePlanRequiredError(resumeError)) {
-        openResumeUpgrade(errorText(resumeError));
+        setError(errorText(resumeError));
+        setNotice("");
+        openPaywall();
         return;
       }
 
@@ -257,17 +234,12 @@ export default function ResumePage() {
   };
 
   const runFetchLatest = async () => {
-    if (!hasResumeAccess) {
-      openResumeUpgrade();
-      return;
-    }
-
     setLoadingAction("latest");
     setError("");
     setNotice("");
 
     try {
-      const response = await getResume(activeUserId);
+      const response = await getResume(effectiveUserId || null);
       setResumeResponse(response);
       if (!jdText.trim() && response.jdText) {
         setJdText(response.jdText);
@@ -275,7 +247,9 @@ export default function ResumePage() {
       setNotice("Latest resume loaded from the backend.");
     } catch (resumeError) {
       if (isResumePlanRequiredError(resumeError)) {
-        openResumeUpgrade(errorText(resumeError));
+        setError(errorText(resumeError));
+        setNotice("");
+        openPaywall();
         return;
       }
 
@@ -286,11 +260,6 @@ export default function ResumePage() {
   };
 
   const handleDownload = () => {
-    if (!hasResumeAccess) {
-      openResumeUpgrade();
-      return;
-    }
-
     if (!resumeResponse?.pdfBase64) {
       setError("Generate, improve, or fetch a resume before downloading the PDF.");
       return;
@@ -313,22 +282,22 @@ export default function ResumePage() {
             <div>
               <p className="text-sm uppercase tracking-[0.24em] text-accent">Resume intelligence</p>
               <h1 className="mt-3 font-display text-3xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Generate a role-shaped resume from your interview context.</h1>
-              <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">Resume Intelligence is an extra paid service. Session-plan and premium users can generate, improve, fetch, and download resumes here. Free users can view the workspace, but resume actions stay locked until they upgrade.</p>
+              <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">Paste a JD, choose resume text or the active interview session as your source, then generate or improve a backend-shaped resume and download the returned PDF.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                 {authenticatedEmail ? authenticatedEmail : "Anonymous mode"}
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400">
-                User {activeUserId}
+                User {effectiveUserId}
               </span>
               {hasSessionSource && (
                 <span className="rounded-full border border-accent/20 bg-accent/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-accent">
                   Session {currentSession?.sessionId}
                 </span>
               )}
-              <span className={`rounded-full border px-3 py-2 text-xs uppercase tracking-[0.18em] ${hasResumeAccess ? "border-accent/20 bg-accent/10 text-accent" : "border-amber-300/20 bg-amber-300/10 text-amber-200"}`}>
-                {hasResumeAccess ? "Paid access active" : "Paid plan required"}
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400">
+                {effectiveSource === "session" ? "Using session context" : "Using raw text"}
               </span>
             </div>
           </div>
@@ -343,28 +312,6 @@ export default function ResumePage() {
               </div>
 
               <div className="mt-5 grid gap-4">
-                {!hasResumeAccess && (
-                  <div className="rounded-[22px] border border-amber-300/20 bg-amber-300/10 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-amber-200">
-                        <FileLock2 size={16} />
-                      </div>
-                      <div>
-                        <p className="text-sm uppercase tracking-[0.18em] text-amber-200">Paid only</p>
-                        <p className="mt-2 text-base text-slate-100">Resume Intelligence is available on paid plans only.</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-300">Upgrade to a session pack or premium to generate, improve, fetch, and download resumes from this workspace.</p>
-                        <button
-                          type="button"
-                          onClick={() => openResumeUpgrade()}
-                          className="mt-4 inline-flex items-center justify-center rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-4 py-2.5 text-sm font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.01]"
-                        >
-                          Unlock Resume Intelligence
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <label className="block space-y-2">
                   <span className="text-sm uppercase tracking-[0.18em] text-slate-400">Job description</span>
                   <textarea
@@ -426,7 +373,7 @@ export default function ResumePage() {
                 <button
                   type="button"
                   onClick={() => void runGenerate()}
-                  disabled={loadingAction !== null || !hasResumeAccess}
+                  disabled={loadingAction !== null}
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-sm font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {loadingAction === "generate" ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -435,7 +382,7 @@ export default function ResumePage() {
                 <button
                   type="button"
                   onClick={() => void runImprove()}
-                  disabled={loadingAction !== null || !hasResumeAccess}
+                  disabled={loadingAction !== null}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {loadingAction === "improve" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
@@ -444,7 +391,7 @@ export default function ResumePage() {
                 <button
                   type="button"
                   onClick={() => void runFetchLatest()}
-                  disabled={loadingAction !== null || !hasResumeAccess}
+                  disabled={loadingAction !== null}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   {loadingAction === "latest" ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
@@ -453,7 +400,7 @@ export default function ResumePage() {
                 <button
                   type="button"
                   onClick={handleDownload}
-                  disabled={!resumeResponse?.pdfBase64 || !hasResumeAccess}
+                  disabled={!resumeResponse?.pdfBase64}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Download size={16} />
@@ -477,9 +424,7 @@ export default function ResumePage() {
                   <p className="mt-3 text-sm leading-7 text-slate-300 sm:text-base">
                     {preview
                       ? "Review the generated structure here before downloading the PDF."
-                      : hasResumeAccess
-                        ? "Generate, improve, or fetch the latest resume to preview the summary, skills, experience, and projects."
-                        : "Free users cannot generate, fetch, or download resumes here. Upgrade to a paid plan to unlock the full resume workflow."}
+                      : "Generate, improve, or fetch the latest resume to preview the summary, skills, experience, and projects."}
                   </p>
                 </div>
                 {resumeResponse && (
