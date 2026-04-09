@@ -88,12 +88,6 @@ export default function InterviewLayout({
         </div>
       )}
 
-      {isLocked && (
-        <div className="mt-5 rounded-[24px] border border-amber-300/20 bg-amber-300/10 px-4 py-4 text-base text-amber-100">
-          No sessions left.
-        </div>
-      )}
-
       {error && <div className="mt-5 rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-base text-rose-200">{error}</div>}
       {notice && <div className="mt-5 rounded-[24px] border border-accent/20 bg-accent/10 px-4 py-4 text-base text-emerald-200">{notice}</div>}
 

@@ -418,8 +418,13 @@ export default function InterviewPage() {
             <span className="text-sm text-slate-400">{planLabel(currentPlan)}</span>
           </div>
 
-          <div className={`mx-auto rounded-full border px-5 py-2 text-center text-base font-medium ${isUrgent ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-accent/20 bg-accent/10 text-accent"}`}>
-            {uiState === "listening" ? timerLabel(countdown) : timerLabel(MAX_SECONDS)}
+          <div className="mx-auto flex items-center gap-2">
+            <div className={`rounded-full border px-5 py-2 text-center text-base font-medium ${isUrgent ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-accent/20 bg-accent/10 text-accent"}`}>
+              {uiState === "listening" ? timerLabel(countdown) : timerLabel(MAX_SECONDS)}
+            </div>
+            <div className={`rounded-full border px-4 py-2 text-sm uppercase tracking-[0.18em] ${isUrgent ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : "border-white/10 bg-white/[0.04] text-slate-200"}`}>
+              Q {questionNumber}/5
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2">
@@ -661,11 +666,11 @@ export default function InterviewPage() {
             {uiState === "processing" ? (
               <>
                 <Loader2 size={20} className="animate-spin" />
-                Processing...
+                Analyzing your response...
               </>
             ) : uiState === "listening" ? (
               <>
-                <PauseCircle size={20} />
+                <PauseCircle size={20} className="animate-pulse" />
                 Listening...
               </>
             ) : (
