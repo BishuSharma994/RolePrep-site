@@ -146,6 +146,11 @@ interface AppState {
   authenticatedEmail: string;
   authenticatedUserId: string;
   authExpiry: number;
+  authRequired: boolean;
+  anonymousModeAllowed: boolean;
+  otpLoginEnabled: boolean;
+  accountSyncEnabled: boolean;
+  authConfigHydrated: boolean;
   transcript: string;
   analysis: AnalysisResult | null;
   currentSession: Session | null;
@@ -156,10 +161,16 @@ interface AppState {
   premiumActive: boolean;
   entitlementHydrated: boolean;
   isPaywallOpen: boolean;
+  isAccountAccessOpen: boolean;
+  pendingStartInterview: boolean;
 
   setActiveUserId: (userId: string) => void;
   setAuthSession: (session: { authToken: string; email: string; userId: string; expiresAt: number }) => void;
   clearAuthSession: () => void;
+  setAuthConfig: (config: { authRequired: boolean; anonymousModeAllowed: boolean; otpLoginEnabled: boolean; accountSyncEnabled: boolean }) => void;
+  openAccountAccess: (pendingStartInterview?: boolean) => void;
+  closeAccountAccess: () => void;
+  setPendingStartInterview: (value: boolean) => void;
   setTranscript: (transcript: string) => void;
   setAnalysis: (analysis: AnalysisResult | null) => void;
   setCurrentSession: (session: Session | null) => void;
@@ -193,6 +204,11 @@ export const useStore = create<AppState>((set) => ({
   authenticatedEmail: initialAuthSession?.email ?? "",
   authenticatedUserId: initialAuthSession?.userId ?? "",
   authExpiry: initialAuthSession?.expiresAt ?? 0,
+  authRequired: false,
+  anonymousModeAllowed: true,
+  otpLoginEnabled: true,
+  accountSyncEnabled: true,
+  authConfigHydrated: false,
   transcript: "",
   analysis: null,
   currentSession: null,
@@ -203,6 +219,8 @@ export const useStore = create<AppState>((set) => ({
   premiumActive: false,
   entitlementHydrated: false,
   isPaywallOpen: false,
+  isAccountAccessOpen: false,
+  pendingStartInterview: false,
 
   setActiveUserId: (userId) => {
     persistUserId(userId);
@@ -230,6 +248,21 @@ export const useStore = create<AppState>((set) => ({
       authExpiry: 0,
     });
   },
+  setAuthConfig: ({ authRequired, anonymousModeAllowed, otpLoginEnabled, accountSyncEnabled }) =>
+    set({
+      authRequired,
+      anonymousModeAllowed,
+      otpLoginEnabled,
+      accountSyncEnabled,
+      authConfigHydrated: true,
+    }),
+  openAccountAccess: (pendingStartInterview = false) =>
+    set((state) => ({
+      isAccountAccessOpen: true,
+      pendingStartInterview: pendingStartInterview || state.pendingStartInterview,
+    })),
+  closeAccountAccess: () => set({ isAccountAccessOpen: false }),
+  setPendingStartInterview: (pendingStartInterview) => set({ pendingStartInterview }),
   setTranscript: (transcript) => set({ transcript }),
   setAnalysis: (analysis) => set({ analysis }),
   setCurrentSession: (currentSession) => {

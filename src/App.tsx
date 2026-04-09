@@ -4,12 +4,13 @@ import AccountAccessPanel from "./components/AccountAccessPanel";
 import AppNavbar from "./components/AppNavbar";
 import GlobalPaywall from "./components/GlobalPaywall";
 import InstallPrompt from "./components/InstallPrompt";
-import { getAuthSession, getOrCreateLocalUserId, getSessions } from "./services/api";
+import { getAuthConfig, getAuthSession, getOrCreateLocalUserId, getSessions } from "./services/api";
 import { useStore } from "./store";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const InterviewPage = lazy(() => import("./pages/InterviewPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const ResumePage = lazy(() => import("./pages/ResumePage"));
 
 function RouteLoader() {
   return (
@@ -30,12 +31,33 @@ function AppShell() {
   const setCurrentSession = useStore((state) => state.setCurrentSession);
   const setAuthSession = useStore((state) => state.setAuthSession);
   const clearAuthSession = useStore((state) => state.clearAuthSession);
+  const setAuthConfig = useStore((state) => state.setAuthConfig);
 
   useEffect(() => {
     let isMounted = true;
 
     const bootstrap = async () => {
       let resolvedUserId = getOrCreateLocalUserId();
+
+      try {
+        const authConfig = await getAuthConfig();
+        if (!isMounted) {
+          return;
+        }
+
+        setAuthConfig(authConfig);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setAuthConfig({
+          authRequired: false,
+          anonymousModeAllowed: true,
+          otpLoginEnabled: true,
+          accountSyncEnabled: true,
+        });
+      }
 
       if (authToken) {
         try {
@@ -83,7 +105,7 @@ function AppShell() {
     return () => {
       isMounted = false;
     };
-  }, [authToken, clearAuthSession, setAuthSession, setCurrentSession, setSessions]);
+  }, [authToken, clearAuthSession, setAuthConfig, setAuthSession, setCurrentSession, setSessions]);
 
   return (
     <div className="min-h-dvh bg-bg-base">
@@ -105,6 +127,7 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/interview" element={<InterviewPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/resume" element={<ResumePage />} />
           </Route>
         </Routes>
       </Suspense>

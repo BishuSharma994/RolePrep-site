@@ -115,6 +115,8 @@ export default function InterviewPage() {
   const navigate = useNavigate();
   const activeUserId = useStore((state) => state.activeUserId);
   const authToken = useStore((state) => state.authToken);
+  const authRequired = useStore((state) => state.authRequired);
+  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const transcript = useStore((state) => state.transcript);
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
@@ -127,6 +129,8 @@ export default function InterviewPage() {
   const setCurrentSession = useStore((state) => state.setCurrentSession);
   const setSessions = useStore((state) => state.setSessions);
   const openPaywall = useStore((state) => state.openPaywall);
+  const openAccountAccess = useStore((state) => state.openAccountAccess);
+  const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const device = useDeviceProfile();
   const { state: recorderState, audioBlob, duration, errorMsg, start, stop, reset } = useAudioRecorder();
 
@@ -380,6 +384,11 @@ export default function InterviewPage() {
   async function handleMicButton() {
     if (uiState === "processing") return;
     if (recorderState === "recording") return stop();
+    if (!authToken && (authRequired || !anonymousModeAllowed)) {
+      setPendingStartInterview(true);
+      openAccountAccess(true);
+      return;
+    }
     if (!role.trim()) return setError("Set your target role before starting the interview.");
     if (!jdText.trim()) return setError("Paste the job description before starting the interview.");
 

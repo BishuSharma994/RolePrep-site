@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { AnalysisResult, Session } from "../store";
+import type { ResumeDocument, ResumeGeneratePayload, ResumeImprovePayload, ResumeResponse, ResumeSection } from "../types/resume";
 
 const USER_ID_STORAGE_KEY = "roleprep_web_user_id";
 const AUTH_STORAGE_KEY = "roleprep_auth_session";
@@ -54,6 +55,53 @@ interface CreateSessionPayload {
 }
 
 export type PlanType = "session_10" | "session_29" | "premium";
+
+function normalizeResumeSectionList(value: unknown): ResumeSection[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      return {
+        title: String((entry as { title?: string }).title ?? ""),
+        bullets: Array.isArray((entry as { bullets?: unknown[] }).bullets)
+          ? ((entry as { bullets?: unknown[] }).bullets ?? []).map((bullet) => String(bullet ?? "")).filter(Boolean)
+          : [],
+      };
+    })
+    .filter((entry): entry is ResumeSection => Boolean(entry && (entry.title || entry.bullets.length)));
+}
+
+function normalizeResumeDocument(value: unknown): ResumeDocument {
+  const payload = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  return {
+    summary: String(payload.summary ?? ""),
+    skills: Array.isArray(payload.skills) ? payload.skills.map((skill) => String(skill ?? "")).filter(Boolean) : [],
+    experience: normalizeResumeSectionList(payload.experience),
+    projects: normalizeResumeSectionList(payload.projects),
+  };
+}
+
+function normalizeResumeResponse(payload: unknown): ResumeResponse {
+  const data = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+
+  return {
+    status: String(data.status ?? ""),
+    userId: String(data.user_id ?? ""),
+    jdText: String(data.jd_text ?? ""),
+    resumeJson: normalizeResumeDocument(data.resume_json),
+    createdAt: String(data.created_at ?? ""),
+    pdfBase64: String(data.pdf_base64 ?? ""),
+    pdfFilename: String(data.pdf_filename ?? "roleprep_resume.pdf"),
+    contentType: String(data.content_type ?? "application/pdf"),
+  };
+}
 
 function readStoredAuthSession(): StoredAuthSession | null {
   if (typeof window === "undefined") {
@@ -309,6 +357,17 @@ export async function getAuthSession() {
   };
 }
 
+export async function getAuthConfig() {
+  const { data } = await API.get("/auth/config");
+  return {
+    status: String(data?.status ?? ""),
+    authRequired: Boolean(data?.auth_required),
+    anonymousModeAllowed: "anonymous_mode_allowed" in (data ?? {}) ? Boolean(data?.anonymous_mode_allowed) : true,
+    otpLoginEnabled: "otp_login_enabled" in (data ?? {}) ? Boolean(data?.otp_login_enabled) : true,
+    accountSyncEnabled: "account_sync_enabled" in (data ?? {}) ? Boolean(data?.account_sync_enabled) : true,
+  };
+}
+
 export async function logout() {
   const { data } = await API.post("/auth/logout");
   return {
@@ -339,6 +398,35 @@ export async function linkAccount(userId: string, code: string) {
     status: String(data?.status ?? ""),
     userId: String(data?.user_id ?? ""),
   };
+}
+
+export async function generateResume(payload: ResumeGeneratePayload) {
+  const { data } = await API.post("/resume/generate", {
+    user_id: payload.userId ?? null,
+    jd_text: payload.jdText,
+    raw_text: payload.rawText ?? null,
+    session_id: payload.sessionId ?? null,
+  });
+
+  return normalizeResumeResponse(data);
+}
+
+export async function improveResume(payload: ResumeImprovePayload) {
+  const { data } = await API.post("/resume/improve", {
+    user_id: payload.userId ?? null,
+    jd_text: payload.jdText,
+    resume_json: payload.resumeJson ?? null,
+    raw_text: payload.rawText ?? null,
+    session_id: payload.sessionId ?? null,
+  });
+
+  return normalizeResumeResponse(data);
+}
+
+export async function getResume(userId?: string | null) {
+  const resolvedUserId = userId || getPrimaryUserId();
+  const { data } = await API.get(`/resume/${encodeURIComponent(resolvedUserId)}`);
+  return normalizeResumeResponse(data);
 }
 
 export function normalizeAnalysisResponse(payload: unknown) {

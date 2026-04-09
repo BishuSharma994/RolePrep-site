@@ -15,6 +15,7 @@ export default function AppNavbar() {
   const currentSession = useStore((state) => state.currentSession);
   const activeUserId = useStore((state) => state.activeUserId);
   const authenticatedEmail = useStore((state) => state.authenticatedEmail);
+  const openAccountAccess = useStore((state) => state.openAccountAccess);
   const startInterview = useStartInterviewAction();
   const profileLabel = authenticatedEmail
     ? authenticatedEmail
@@ -39,6 +40,9 @@ export default function AppNavbar() {
           <NavLink to="/dashboard" className={({ isActive }) => navClassName(isActive)}>
             Dashboard
           </NavLink>
+          <NavLink to="/resume" className={({ isActive }) => navClassName(isActive)}>
+            Resume
+          </NavLink>
           <button
             type="button"
             onClick={startInterview}
@@ -48,6 +52,7 @@ export default function AppNavbar() {
           </button>
           <button
             type="button"
+            onClick={() => openAccountAccess(false)}
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
             title={activeUserId}
           >
@@ -81,6 +86,9 @@ export default function AppNavbar() {
             <NavLink to="/dashboard" className={({ isActive }) => navClassName(isActive)} onClick={() => setIsOpen(false)}>
               Dashboard
             </NavLink>
+            <NavLink to="/resume" className={({ isActive }) => navClassName(isActive)} onClick={() => setIsOpen(false)}>
+              Resume
+            </NavLink>
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-200">
               <div className="flex items-center gap-2">
                 <UserRound size={16} />
@@ -88,6 +96,16 @@ export default function AppNavbar() {
               </div>
               <p className="mt-2 text-sm text-slate-300">{profileLabel}</p>
               <p className="mt-1 break-all text-xs uppercase tracking-[0.18em] text-slate-500">{activeUserId}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  openAccountAccess(false);
+                }}
+                className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
+              >
+                Manage account
+              </button>
             </div>
           </div>
         </div>
