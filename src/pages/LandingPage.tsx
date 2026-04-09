@@ -4,8 +4,11 @@ import DashboardPreview from "../components/DashboardPreview";
 import FlowSection from "../components/FlowSection";
 import SimulationPreview from "../components/SimulationPreview";
 import SupportFooter from "../components/SupportFooter";
+import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 
 export default function LandingPage() {
+  const startInterview = useStartInterviewAction();
+
   return (
     <div className="min-h-dvh bg-[#070b14] noise-overlay">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -22,13 +25,14 @@ export default function LandingPage() {
             <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">Voice-based AI interviews with scoring and feedback.</p>
 
             <div className="mt-8">
-              <Link
-                to="/interview"
+              <button
+                type="button"
+                onClick={startInterview}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
               >
                 Start Interview
                 <ArrowRight size={18} />
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -38,25 +42,27 @@ export default function LandingPage() {
         <FlowSection />
 
         <div className="mt-8">
-          <Link
-            to="/interview"
+          <button
+            type="button"
+            onClick={startInterview}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview
             <ArrowRight size={18} />
-          </Link>
+          </button>
         </div>
 
         <DashboardPreview />
 
         <div className="mt-8">
-          <Link
-            to="/interview"
+          <button
+            type="button"
+            onClick={startInterview}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview
             <ArrowRight size={18} />
-          </Link>
+          </button>
         </div>
 
         <SupportFooter className="mt-10" />

@@ -12,11 +12,12 @@ interface Props {
   plans: Plan[];
   activeCheckoutPlan: PlanType | null;
   onCheckout: (planType: PlanType) => void;
+  fixed?: boolean;
 }
 
-export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout }: Props) {
+export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, fixed = false }: Props) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[28px] bg-[rgba(4,8,16,0.82)] p-4 backdrop-blur-md">
+    <div className={`${fixed ? "fixed" : "absolute"} inset-0 z-20 flex items-center justify-center rounded-[28px] bg-[rgba(4,8,16,0.82)] p-4 backdrop-blur-md`}>
       <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.98),rgba(8,11,20,0.98))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-amber-200">

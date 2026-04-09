@@ -76,6 +76,9 @@ export default function InterviewPage() {
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
   const sessions = useStore((state) => state.sessions);
+  const credits = useStore((state) => state.credits);
+  const premiumActive = useStore((state) => state.premiumActive);
+  const premiumExpiry = useStore((state) => state.premiumExpiry);
   const setTranscript = useStore((state) => state.setTranscript);
   const setAnalysis = useStore((state) => state.setAnalysis);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
@@ -99,9 +102,8 @@ export default function InterviewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
-  const isPremium = currentPlan === "premium";
-  const credits = currentSession?.sessionCredits ?? 0;
-  const isLocked = currentSession !== null && !isPremium && credits <= 0;
+  const isPremium = premiumActive || currentPlan === "premium";
+  const isLocked = currentSession !== null && !premiumActive && credits <= 0;
   const countdown = Math.max(0, MAX_SECONDS - duration);
   const isMobileLayout = device.isMobile || device.isStandalone;
   const statusText = useMemo(
@@ -432,7 +434,7 @@ export default function InterviewPage() {
                 </div>
                 <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Expiry</p>
-                  <p className="mt-3 text-lg text-slate-100">{timeLeft(currentSession?.subscriptionExpiry ?? 0)}</p>
+                  <p className="mt-3 text-lg text-slate-100">{timeLeft(premiumExpiry)}</p>
                 </div>
               </div>
 

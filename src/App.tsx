@@ -1,7 +1,10 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
 import AppNavbar from "./components/AppNavbar";
+import GlobalPaywall from "./components/GlobalPaywall";
 import InstallPrompt from "./components/InstallPrompt";
+import { getOrCreateLocalUserId, getSessions } from "./services/api";
+import { useStore } from "./store";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const InterviewPage = lazy(() => import("./pages/InterviewPage"));
@@ -21,9 +24,39 @@ function RouteLoader() {
 }
 
 function AppShell() {
+  const setSessions = useStore((state) => state.setSessions);
+  const setCurrentSession = useStore((state) => state.setCurrentSession);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrap = async () => {
+      try {
+        const sessions = await getSessions(getOrCreateLocalUserId());
+        if (!isMounted) {
+          return;
+        }
+
+        setSessions(sessions);
+        if (sessions[0]) {
+          setCurrentSession(sessions[0]);
+        }
+      } catch {
+        // The app can still render before entitlement data is available.
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setCurrentSession, setSessions]);
+
   return (
     <div className="min-h-dvh bg-bg-base">
       <AppNavbar />
+      <GlobalPaywall />
       <Outlet />
     </div>
   );

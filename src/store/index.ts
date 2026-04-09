@@ -43,12 +43,41 @@ export interface Session {
   updatedAt: number | string | null;
 }
 
+function toExpiryTimestamp(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+
+  if (typeof value === "string" && value) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+}
+
+function deriveEntitlement(session: Session | null) {
+  const credits = session?.sessionCredits ?? 0;
+  const premiumExpiry = toExpiryTimestamp(session?.subscriptionExpiry ?? 0);
+  const premiumActive = premiumExpiry > Date.now();
+
+  return {
+    credits,
+    premiumExpiry,
+    premiumActive,
+  };
+}
+
 interface AppState {
   transcript: string;
   analysis: AnalysisResult | null;
   currentSession: Session | null;
   sessions: Session[];
   isAnalyzing: boolean;
+  credits: number;
+  premiumExpiry: number;
+  premiumActive: boolean;
+  isPaywallOpen: boolean;
 
   setTranscript: (transcript: string) => void;
   setAnalysis: (analysis: AnalysisResult | null) => void;
@@ -56,6 +85,9 @@ interface AppState {
   setSessions: (sessions: Session[]) => void;
   addSession: (session: Session) => void;
   setIsAnalyzing: (value: boolean) => void;
+  openPaywall: () => void;
+  closePaywall: () => void;
+  syncEntitlement: (session: Session | null) => void;
   reset: () => void;
 }
 
@@ -77,12 +109,34 @@ export const useStore = create<AppState>((set) => ({
   currentSession: null,
   sessions: [],
   isAnalyzing: false,
+  credits: 0,
+  premiumExpiry: 0,
+  premiumActive: false,
+  isPaywallOpen: false,
 
   setTranscript: (transcript) => set({ transcript }),
   setAnalysis: (analysis) => set({ analysis }),
-  setCurrentSession: (currentSession) => set({ currentSession }),
-  setSessions: (sessions) => set({ sessions }),
-  addSession: (session) => set((state) => ({ sessions: upsertSession(state.sessions, session) })),
+  setCurrentSession: (currentSession) =>
+    set(() => ({
+      currentSession,
+      ...deriveEntitlement(currentSession),
+    })),
+  setSessions: (sessions) =>
+    set((state) => {
+      const source = state.currentSession ?? sessions[0] ?? null;
+      return {
+        sessions,
+        ...deriveEntitlement(source),
+      };
+    }),
+  addSession: (session) =>
+    set((state) => ({
+      sessions: upsertSession(state.sessions, session),
+      ...deriveEntitlement(state.currentSession ?? session),
+    })),
   setIsAnalyzing: (isAnalyzing) => set({ isAnalyzing }),
-  reset: () => set({ transcript: "", analysis: null, currentSession: null }),
+  openPaywall: () => set({ isPaywallOpen: true }),
+  closePaywall: () => set({ isPaywallOpen: false }),
+  syncEntitlement: (session) => set({ ...deriveEntitlement(session) }),
+  reset: () => set({ transcript: "", analysis: null, currentSession: null, ...deriveEntitlement(null) }),
 }));

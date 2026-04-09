@@ -5,6 +5,7 @@ import ScoreCard from "../components/ScoreCard";
 import ScoreTrendChart from "../components/ScoreTrendChart";
 import SupportFooter from "../components/SupportFooter";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
+import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 import { getOrCreateLocalUserId, getSessions } from "../services/api";
 import { useStore, type Session } from "../store";
 
@@ -58,9 +59,13 @@ export default function DashboardPage() {
   const sessions = useStore((state) => state.sessions);
   const setSessions = useStore((state) => state.setSessions);
   const device = useDeviceProfile();
+  const credits = useStore((state) => state.credits);
+  const premiumActive = useStore((state) => state.premiumActive);
+  const premiumExpiry = useStore((state) => state.premiumExpiry);
   const [userId] = useState(() => getOrCreateLocalUserId());
   const [isLoading, setIsLoading] = useState(true);
   const [warning, setWarning] = useState("");
+  const startInterview = useStartInterviewAction();
 
   useEffect(() => {
     let isMounted = true;
@@ -99,12 +104,12 @@ export default function DashboardPage() {
         <section className="rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.95))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div><p className="text-sm uppercase tracking-[0.24em] text-accent">Retention dashboard</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl lg:text-6xl">Keep your interview momentum visible</h1><p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">Track score movement, spot weak areas, and jump straight back into the next practice round before momentum drops.</p></div>
-            <Link to="/interview" className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></Link>
+            <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></button>
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Total interviews</p><Layers3 size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{totalInterviews}</p></div>
             <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Avg score</p><Gauge size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{average}</p></div>
-            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current streak</p><Flame size={18} className="text-amber-300" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{streak}</p></div>
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">{premiumActive ? "Premium expiry" : "Remaining sessions"}</p>{premiumActive ? <Flame size={18} className="text-amber-300" /> : <Layers3 size={18} className="text-accent" />}</div><p className="mt-4 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{premiumActive ? dateLabel(premiumExpiry) : credits}</p></div>
           </div>
         </section>
 
@@ -137,7 +142,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div><p className="text-2xl text-slate-50">{session.role || "Interview session"}</p><div className="mt-2 inline-flex items-center gap-2 text-sm text-slate-400"><Calendar size={14} />{dateLabel(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)}</div></div>
-                    <Link to="/interview" className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-accent/25 hover:bg-white/[0.08]">Retry<RotateCcw size={16} /></Link>
+                    <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-accent/25 hover:bg-white/[0.08]">Start Interview<RotateCcw size={16} /></button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Role</p><p className="mt-3 text-lg text-slate-100">{session.role || "Interview session"}</p></div>

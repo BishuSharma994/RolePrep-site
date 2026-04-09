@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Menu, UserRound, X } from "lucide-react";
 import { getOrCreateLocalUserId } from "../services/api";
+import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 import { useStore } from "../store";
 
 function navClassName(isActive: boolean) {
@@ -14,6 +15,7 @@ export default function AppNavbar() {
   const [isOpen, setIsOpen] = useState(false);
   const currentSession = useStore((state) => state.currentSession);
   const userId = getOrCreateLocalUserId();
+  const startInterview = useStartInterviewAction();
   const profileLabel = currentSession?.selectedPlan
     ? `${currentSession.selectedPlan.replace(/_/g, " ")} user`
     : "RolePrep account";
@@ -35,12 +37,13 @@ export default function AppNavbar() {
           <NavLink to="/dashboard" className={({ isActive }) => navClassName(isActive)}>
             Dashboard
           </NavLink>
-          <Link
-            to="/interview"
+          <button
+            type="button"
+            onClick={startInterview}
             className="rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-2.5 text-sm font-medium text-[#07110c] shadow-[0_16px_34px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview
-          </Link>
+          </button>
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
@@ -52,12 +55,13 @@ export default function AppNavbar() {
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          <Link
-            to="/interview"
+          <button
+            type="button"
+            onClick={startInterview}
             className="rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-4 py-2 text-sm font-medium text-[#07110c] shadow-[0_16px_34px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview
-          </Link>
+          </button>
           <button
             type="button"
             onClick={() => setIsOpen((value) => !value)}
