@@ -25,6 +25,7 @@ import {
 } from "../services/api";
 import InterviewLayout from "../components/InterviewLayout";
 import { useStore } from "../store";
+import { track } from "../utils/track";
 
 type UiState = "idle" | "listening" | "processing" | "feedback" | "next_question";
 
@@ -70,7 +71,7 @@ function errorText(error: unknown) {
   return error instanceof Error && error.message ? error.message : "Something went wrong. Please try again.";
 }
 
-function isNoCreditsError(error: unknown) {
+function isAccessBlockedError(error: unknown) {
   if (!error || typeof error !== "object" || !("response" in error)) {
     return false;
   }
@@ -82,11 +83,17 @@ function isNoCreditsError(error: unknown) {
 
   const data = response.data as {
     code?: string;
+    reason?: string;
     detail?: string | { code?: string; reason?: string; message?: string };
   };
 
   const directCode = typeof data.code === "string" ? data.code.toUpperCase() : "";
   if (directCode === "NO_CREDITS") {
+    return true;
+  }
+
+  const directReason = typeof data.reason === "string" ? data.reason.toLowerCase() : "";
+  if (directReason === "session_limit_reached" || directReason === "question_limit_reached") {
     return true;
   }
 
@@ -97,11 +104,11 @@ function isNoCreditsError(error: unknown) {
     }
 
     const nestedText = `${data.detail.reason ?? ""} ${data.detail.message ?? ""}`.toLowerCase();
-    return nestedText.includes("no credits") || nestedText.includes("no sessions left");
+    return nestedText.includes("no credits") || nestedText.includes("no sessions left") || nestedText.includes("session_limit_reached") || nestedText.includes("question_limit_reached");
   }
 
   const detailText = typeof data.detail === "string" ? data.detail.toLowerCase() : "";
-  return detailText.includes("no credits") || detailText.includes("no sessions left");
+  return detailText.includes("no credits") || detailText.includes("no sessions left") || detailText.includes("session_limit_reached") || detailText.includes("question_limit_reached");
 }
 
 export default function InterviewPage() {
@@ -139,7 +146,8 @@ export default function InterviewPage() {
 
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
   const isPremium = premiumActive || currentPlan === "premium";
-  const isLocked = currentSession !== null && !premiumActive && credits <= 0;
+  const hasActiveFreeSession = Boolean(currentSession?.activeSession && currentPlan === "free");
+  const isLocked = false;
   const countdown = Math.max(0, MAX_SECONDS - duration);
   const isMobileLayout = device.isMobile || device.isStandalone;
   const isUrgent = uiState === "listening" && countdown <= 10;
@@ -167,6 +175,9 @@ export default function InterviewPage() {
       if (nextSessions[0].currentQuestion) {
         setQuestion(nextSessions[0].currentQuestion);
       }
+    } else {
+      setCurrentSession(null);
+      setSessionContextKey("");
     }
 
     return nextSessions[0] ?? null;
@@ -235,9 +246,11 @@ export default function InterviewPage() {
       setCurrentSession(session);
       setSessions([session, ...sessions.filter((entry) => entry.sessionId !== session.sessionId)]);
       setSessionContextKey(contextKey);
+      track("interview_start_success");
       return session;
     } catch (sessionError) {
-      if (isNoCreditsError(sessionError)) {
+      if (isAccessBlockedError(sessionError)) {
+        track("interview_start_blocked_no_credits");
         openPaywall();
       }
 
@@ -266,6 +279,7 @@ export default function InterviewPage() {
               type: blob.type || "audio/webm",
             });
 
+      track("question_answered");
       const response = await analyzeAudio(file, {
         role: role.trim(),
         jdText: jdText.trim(),
@@ -285,7 +299,8 @@ export default function InterviewPage() {
       await refreshSessions();
       setUiState("feedback");
     } catch (submissionError) {
-      if (isNoCreditsError(submissionError)) {
+      if (isAccessBlockedError(submissionError)) {
+        track("interview_start_blocked_no_credits");
         openPaywall();
         setUiState("idle");
         return;
@@ -313,6 +328,7 @@ export default function InterviewPage() {
         const next = await refreshSessions();
         const nextPlan = next?.activeSessionPlan || next?.selectedPlan || "free";
         if (previousPlan !== nextPlan && nextPlan !== "free") {
+          track("payment_success");
           setNotice(`Payment confirmed. ${planLabel(nextPlan)} is active now.`);
         }
       } catch {
@@ -331,13 +347,24 @@ export default function InterviewPage() {
 
   async function handleMicButton() {
     if (uiState === "processing") return;
-    if (isLocked) {
-      openPaywall();
-      return;
-    }
     if (recorderState === "recording") return stop();
     if (!role.trim()) return setError("Set your target role before starting the interview.");
     if (!jdText.trim()) return setError("Paste the job description before starting the interview.");
+
+    if (!currentSession?.activeSession && !hasActiveFreeSession) {
+      try {
+        await ensureSession();
+      } catch (sessionError) {
+        if (isAccessBlockedError(sessionError)) {
+          setError("");
+          return;
+        }
+
+        setError(errorText(sessionError));
+        return;
+      }
+    }
+
     await start();
   }
 
@@ -345,6 +372,7 @@ export default function InterviewPage() {
     setError("");
     setNotice("");
     setActiveCheckoutPlan(planType);
+    track("payment_initiated");
 
     try {
       const { paymentLink } = await createPaymentLink(userId, planType);
@@ -386,6 +414,7 @@ export default function InterviewPage() {
     }
 
     const redirectTimer = window.setTimeout(() => {
+      track("session_completed");
       setAnalysis(null);
       setTranscript("");
       navigate("/dashboard");

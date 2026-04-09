@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import PaywallModal from "./PaywallModal";
 import { createPaymentLink, getOrCreateLocalUserId, type PlanType } from "../services/api";
 import { useStore } from "../store";
+import { track } from "../utils/track";
 
 const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: string }> = [
   { planType: "session_10", label: "₹10", price: "1 session", blurb: "Unlock one interview round." },
@@ -10,9 +12,17 @@ const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: st
 ];
 
 export default function GlobalPaywall() {
+  const navigate = useNavigate();
   const isPaywallOpen = useStore((state) => state.isPaywallOpen);
+  const closePaywall = useStore((state) => state.closePaywall);
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
   const userId = getOrCreateLocalUserId();
+
+  useEffect(() => {
+    if (isPaywallOpen) {
+      track("paywall_shown");
+    }
+  }, [isPaywallOpen]);
 
   if (!isPaywallOpen) {
     return null;
@@ -20,6 +30,7 @@ export default function GlobalPaywall() {
 
   const handleCheckout = async (planType: PlanType) => {
     setActiveCheckoutPlan(planType);
+    track("payment_initiated");
 
     try {
       const { paymentLink } = await createPaymentLink(userId, planType);
@@ -33,10 +44,21 @@ export default function GlobalPaywall() {
     }
   };
 
+  const handleFreeSession = () => {
+    closePaywall();
+    navigate("/interview");
+  };
+
   return (
     <div>
       <div>
-        <PaywallModal plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} fixed />
+        <PaywallModal
+          plans={PLANS}
+          activeCheckoutPlan={activeCheckoutPlan}
+          onCheckout={(planType) => void handleCheckout(planType)}
+          onFreeSession={handleFreeSession}
+          fixed
+        />
       </div>
     </div>
   );

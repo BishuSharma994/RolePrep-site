@@ -8,6 +8,7 @@ import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 import { getOrCreateLocalUserId, getSessions } from "../services/api";
 import { useStore, type Session } from "../store";
+import { track } from "../utils/track";
 
 const STAGES = ["setup", "warmup", "core", "followup", "complete"];
 const epoch = (value: number | string | null) => typeof value === "number" ? (value > 10_000_000_000 ? value : value * 1000) : typeof value === "string" && value ? (Number.isNaN(Date.parse(value)) ? Date.now() : Date.parse(value)) : Date.now();
@@ -68,6 +69,15 @@ export default function DashboardPage() {
   const startInterview = useStartInterviewAction();
 
   useEffect(() => {
+    track("dashboard_view");
+  }, []);
+
+  const handleDashboardStart = () => {
+    track("start_from_dashboard");
+    startInterview();
+  };
+
+  useEffect(() => {
     let isMounted = true;
     const load = async () => {
       setIsLoading(true); setWarning("");
@@ -106,7 +116,7 @@ export default function DashboardPage() {
             <div>
               <div className="flex flex-col gap-4">
                 <div><p className="text-sm uppercase tracking-[0.24em] text-accent">Retention dashboard</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Keep your interview momentum visible</h1><p className="mt-4 max-w-2xl text-base leading-8 text-slate-300">Track score movement, spot weak areas, and jump straight back into the next practice round before momentum drops.</p></div>
-                <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></button>
+                <button type="button" onClick={handleDashboardStart} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></button>
               </div>
               <div className="mt-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
                 <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Total interviews</p><Layers3 size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{totalInterviews}</p></div>
@@ -171,7 +181,7 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div><p className="text-2xl text-slate-50">{session.role || "Interview session"}</p><div className="mt-2 inline-flex items-center gap-2 text-sm text-slate-400"><Calendar size={14} />{dateLabel(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)}</div></div>
-                    <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-accent/25 hover:bg-white/[0.08]">Start Interview<RotateCcw size={16} /></button>
+                    <button type="button" onClick={handleDashboardStart} className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-accent/25 hover:bg-white/[0.08]">Start Interview<RotateCcw size={16} /></button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Role</p><p className="mt-3 text-lg text-slate-100">{session.role || "Interview session"}</p></div>

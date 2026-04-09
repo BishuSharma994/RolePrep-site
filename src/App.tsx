@@ -40,6 +40,8 @@ function AppShell() {
         setSessions(sessions);
         if (sessions[0]) {
           setCurrentSession(sessions[0]);
+        } else {
+          setCurrentSession(null);
         }
       } catch {
         // The app can still render before entitlement data is available.

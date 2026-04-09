@@ -6,19 +6,11 @@ export function useStartInterviewAction() {
 
   return () => {
     const {
-      credits,
-      premiumActive,
       entitlementHydrated,
-      openPaywall,
     } = useStore.getState();
 
     if (!entitlementHydrated) {
       navigate("/interview");
-      return;
-    }
-
-    if (!premiumActive && credits <= 0) {
-      openPaywall();
       return;
     }
 

@@ -1,13 +1,23 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import { ArrowRight } from "lucide-react";
 import DashboardPreview from "../components/DashboardPreview";
 import FlowSection from "../components/FlowSection";
 import SimulationPreview from "../components/SimulationPreview";
 import SupportFooter from "../components/SupportFooter";
 import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
+import { track } from "../utils/track";
 
 export default function LandingPage() {
   const startInterview = useStartInterviewAction();
+
+  useEffect(() => {
+    track("landing_view");
+  }, []);
+
+  const handleStartClick = () => {
+    track("start_click");
+    startInterview();
+  };
 
   return (
     <div className="min-h-dvh bg-[#070b14] noise-overlay">
@@ -27,7 +37,7 @@ export default function LandingPage() {
             <div className="mt-8">
               <button
                 type="button"
-                onClick={startInterview}
+                onClick={handleStartClick}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
               >
                 Start Interview
@@ -44,7 +54,7 @@ export default function LandingPage() {
         <div className="mt-8">
           <button
             type="button"
-            onClick={startInterview}
+            onClick={handleStartClick}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview
@@ -57,7 +67,7 @@ export default function LandingPage() {
         <div className="mt-8">
           <button
             type="button"
-            onClick={startInterview}
+            onClick={handleStartClick}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-6 py-4 text-base font-medium text-[#07110c] shadow-[0_20px_40px_rgba(0,255,136,0.18)] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
           >
             Start Interview

@@ -12,10 +12,11 @@ interface Props {
   plans: Plan[];
   activeCheckoutPlan: PlanType | null;
   onCheckout: (planType: PlanType) => void;
+  onFreeSession?: () => void;
   fixed?: boolean;
 }
 
-export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, fixed = false }: Props) {
+export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, onFreeSession, fixed = false }: Props) {
   return (
     <div className={`${fixed ? "fixed" : "absolute"} inset-0 z-[70] flex items-center justify-center bg-[rgba(4,8,16,0.9)] p-4 backdrop-blur-md`}>
       <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.99),rgba(8,11,20,0.99))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
@@ -29,6 +30,20 @@ export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, fi
             <p className="mt-3 text-base leading-7 text-slate-300">Pick a pack to continue the interview loop. Background actions stay locked until access is restored.</p>
           </div>
         </div>
+
+        {onFreeSession && (
+          <button
+            type="button"
+            onClick={onFreeSession}
+            disabled={activeCheckoutPlan !== null}
+            className="mt-5 w-full rounded-[24px] border border-accent/25 bg-accent/10 p-4 text-left transition-all duration-200 ease-in-out hover:-translate-y-1 hover:border-accent/35 hover:bg-accent/12"
+          >
+            <p className="text-sm font-medium text-slate-50">Free session</p>
+            <p className="mt-2 text-sm uppercase tracking-[0.16em] text-accent">1 per day</p>
+            <p className="mt-3 text-sm leading-6 text-slate-300">Use the backend's daily free interview access before upgrading.</p>
+            <div className="mt-4 text-sm text-slate-100">Try free access</div>
+          </button>
+        )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           {plans.map((plan) => (
