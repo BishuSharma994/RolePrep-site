@@ -4,9 +4,9 @@ import { createPaymentLink, getOrCreateLocalUserId, type PlanType } from "../ser
 import { useStore } from "../store";
 
 const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: string }> = [
-  { planType: "session_10", label: "Rs 10", price: "1 session", blurb: "Unlock one interview round." },
-  { planType: "session_29", label: "Rs 29", price: "5 sessions", blurb: "Practice repeatedly without friction." },
-  { planType: "premium", label: "Rs 99", price: "Premium", blurb: "Unlimited access while premium is active." },
+  { planType: "session_10", label: "₹10", price: "1 session", blurb: "Unlock one interview round." },
+  { planType: "session_29", label: "₹29", price: "5 sessions", blurb: "Practice repeatedly without friction." },
+  { planType: "premium", label: "₹99", price: "Premium", blurb: "Unlimited access while premium is active." },
 ];
 
 export default function GlobalPaywall() {

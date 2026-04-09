@@ -102,29 +102,33 @@ export default function DashboardPage() {
       <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className="absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.16),_transparent_38%),radial-gradient(circle_at_20%_20%,_rgba(0,255,136,0.1),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(74,144,226,0.12),_transparent_30%)]" /></div>
       <div className="relative mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
         <section className="rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.95))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div><p className="text-sm uppercase tracking-[0.24em] text-accent">Retention dashboard</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl lg:text-6xl">Keep your interview momentum visible</h1><p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">Track score movement, spot weak areas, and jump straight back into the next practice round before momentum drops.</p></div>
-            <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></button>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Total interviews</p><Layers3 size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{totalInterviews}</p></div>
-            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Avg score</p><Gauge size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{average}</p></div>
-            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">{premiumActive ? "Premium expiry" : "Remaining sessions"}</p>{premiumActive ? <Flame size={18} className="text-amber-300" /> : <Layers3 size={18} className="text-accent" />}</div><p className="mt-4 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{premiumActive ? dateLabel(premiumExpiry) : credits}</p></div>
+          <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div>
+              <div className="flex flex-col gap-4">
+                <div><p className="text-sm uppercase tracking-[0.24em] text-accent">Retention dashboard</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Keep your interview momentum visible</h1><p className="mt-4 max-w-2xl text-base leading-8 text-slate-300">Track score movement, spot weak areas, and jump straight back into the next practice round before momentum drops.</p></div>
+                <button type="button" onClick={startInterview} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></button>
+              </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Total interviews</p><Layers3 size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{totalInterviews}</p></div>
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Avg score</p><Gauge size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{average}</p></div>
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">{premiumActive ? "Premium expiry" : "Remaining sessions"}</p>{premiumActive ? <Flame size={18} className="text-amber-300" /> : <Layers3 size={18} className="text-accent" />}</div><p className="mt-4 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{premiumActive ? dateLabel(premiumExpiry) : credits}</p></div>
+              </div>
+            </div>
+
+            <div className="rounded-[30px] border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Score graph</p></div>
+                  <h2 className="mt-3 font-display text-3xl leading-none tracking-[0.05em] text-slate-50 sm:text-4xl">Your improvement curve</h2>
+                </div>
+                <p className="text-base text-slate-300">Each session stacks into a visible progression line so improvement feels measurable.</p>
+              </div>
+              <div className="mt-6"><ScoreTrendChart data={scoreSeries} height={mobileChartHeight + 40} /></div>
+            </div>
           </div>
         </section>
 
         {warning && <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-base text-rose-200">{warning}</div>}
-
-        <section className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Score graph</p></div>
-              <h2 className="mt-3 font-display text-3xl leading-none tracking-[0.05em] text-slate-50 sm:text-4xl">Your improvement curve</h2>
-            </div>
-            <p className="text-base text-slate-300">Each session stacks into a visible progression line so improvement feels measurable.</p>
-          </div>
-          <div className="mt-6"><ScoreTrendChart data={scoreSeries} height={mobileChartHeight + 40} /></div>
-        </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-5">

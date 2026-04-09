@@ -36,9 +36,9 @@ const QUESTIONS = [
   "Why are you a strong fit for this role right now?",
 ];
 const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: string }> = [
-  { planType: "session_10", label: "Buy Rs 10", price: "1 session", blurb: "Unlock one timed simulation." },
-  { planType: "session_29", label: "Buy Rs 29", price: "5 sessions", blurb: "Run repeated interview drills." },
-  { planType: "premium", label: "Go Premium Rs 99", price: "Unlimited", blurb: "Unlimited access and always-on practice." },
+  { planType: "session_10", label: "₹10", price: "1 session", blurb: "Unlock one timed simulation." },
+  { planType: "session_29", label: "₹29", price: "5 sessions", blurb: "Run repeated interview drills." },
+  { planType: "premium", label: "₹99", price: "Unlimited", blurb: "Unlimited access and always-on practice." },
 ];
 
 const planLabel = (plan: string) => (!plan || plan === "free" ? "Free" : plan === "session_10" ? "1 session" : plan === "session_29" ? "5 session pack" : plan === "premium" ? "Premium" : plan.replace(/_/g, " "));

@@ -77,6 +77,7 @@ interface AppState {
   credits: number;
   premiumExpiry: number;
   premiumActive: boolean;
+  entitlementHydrated: boolean;
   isPaywallOpen: boolean;
 
   setTranscript: (transcript: string) => void;
@@ -112,6 +113,7 @@ export const useStore = create<AppState>((set) => ({
   credits: 0,
   premiumExpiry: 0,
   premiumActive: false,
+  entitlementHydrated: false,
   isPaywallOpen: false,
 
   setTranscript: (transcript) => set({ transcript }),
@@ -119,6 +121,7 @@ export const useStore = create<AppState>((set) => ({
   setCurrentSession: (currentSession) =>
     set(() => ({
       currentSession,
+      entitlementHydrated: true,
       ...deriveEntitlement(currentSession),
     })),
   setSessions: (sessions) =>
@@ -126,17 +129,19 @@ export const useStore = create<AppState>((set) => ({
       const source = state.currentSession ?? sessions[0] ?? null;
       return {
         sessions,
+        entitlementHydrated: true,
         ...deriveEntitlement(source),
       };
     }),
   addSession: (session) =>
     set((state) => ({
       sessions: upsertSession(state.sessions, session),
+      entitlementHydrated: true,
       ...deriveEntitlement(state.currentSession ?? session),
     })),
   setIsAnalyzing: (isAnalyzing) => set({ isAnalyzing }),
   openPaywall: () => set({ isPaywallOpen: true }),
   closePaywall: () => set({ isPaywallOpen: false }),
-  syncEntitlement: (session) => set({ ...deriveEntitlement(session) }),
-  reset: () => set({ transcript: "", analysis: null, currentSession: null, ...deriveEntitlement(null) }),
+  syncEntitlement: (session) => set({ entitlementHydrated: true, ...deriveEntitlement(session) }),
+  reset: () => set({ transcript: "", analysis: null, currentSession: null, entitlementHydrated: false, ...deriveEntitlement(null) }),
 }));

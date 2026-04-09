@@ -3,11 +3,20 @@ import { useStore } from "../store";
 
 export function useStartInterviewAction() {
   const navigate = useNavigate();
-  const credits = useStore((state) => state.credits);
-  const premiumActive = useStore((state) => state.premiumActive);
-  const openPaywall = useStore((state) => state.openPaywall);
 
   return () => {
+    const {
+      credits,
+      premiumActive,
+      entitlementHydrated,
+      openPaywall,
+    } = useStore.getState();
+
+    if (!entitlementHydrated) {
+      navigate("/interview");
+      return;
+    }
+
     if (!premiumActive && credits <= 0) {
       openPaywall();
       return;
