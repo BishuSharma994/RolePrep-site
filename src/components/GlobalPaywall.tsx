@@ -49,6 +49,11 @@ export default function GlobalPaywall() {
     navigate("/interview");
   };
 
+  const handleBackHome = () => {
+    closePaywall();
+    navigate("/");
+  };
+
   return (
     <div>
       <div>
@@ -57,6 +62,7 @@ export default function GlobalPaywall() {
           activeCheckoutPlan={activeCheckoutPlan}
           onCheckout={(planType) => void handleCheckout(planType)}
           onFreeSession={handleFreeSession}
+          onBackHome={handleBackHome}
           fixed
         />
       </div>

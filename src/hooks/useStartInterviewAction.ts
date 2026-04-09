@@ -4,9 +4,9 @@ import { getAuthConfig, getSessions } from "../services/api";
 import { useStore } from "../store";
 
 function hasInterviewAccess() {
-  const { currentSession, credits, premiumActive } = useStore.getState();
+  const { credits, premiumActive } = useStore.getState();
 
-  return premiumActive || credits > 0 || Boolean(currentSession?.activeSession);
+  return premiumActive || credits > 0;
 }
 
 async function hydrateAuthConfigIfNeeded() {
