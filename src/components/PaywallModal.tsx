@@ -17,9 +17,40 @@ interface Props {
 }
 
 export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, onFreeSession, fixed = false }: Props) {
+  const accessOptions = onFreeSession
+    ? [
+        {
+          key: "free",
+          label: "Free",
+          price: "Start now",
+          blurb: "Skip checkout and head straight into the interview experience.",
+          actionLabel: "Go to interview",
+          onClick: onFreeSession,
+          isLoading: false,
+        },
+        ...plans.map((plan) => ({
+          key: plan.planType,
+          label: plan.label,
+          price: plan.price,
+          blurb: plan.blurb,
+          actionLabel: activeCheckoutPlan === plan.planType ? "Opening checkout" : "Continue",
+          onClick: () => onCheckout(plan.planType),
+          isLoading: activeCheckoutPlan === plan.planType,
+        })),
+      ]
+    : plans.map((plan) => ({
+        key: plan.planType,
+        label: plan.label,
+        price: plan.price,
+        blurb: plan.blurb,
+        actionLabel: activeCheckoutPlan === plan.planType ? "Opening checkout" : "Continue",
+        onClick: () => onCheckout(plan.planType),
+        isLoading: activeCheckoutPlan === plan.planType,
+      }));
+
   return (
     <div className={`${fixed ? "fixed" : "absolute"} inset-0 z-[70] flex items-center justify-center bg-[rgba(4,8,16,0.9)] p-4 backdrop-blur-md`}>
-      <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.99),rgba(8,11,20,0.99))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
+      <div className="w-full max-w-5xl rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.99),rgba(8,11,20,0.99))] p-5 shadow-[0_26px_80px_rgba(0,0,0,0.42)] sm:p-6">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-amber-200">
             <Lock size={18} />
@@ -31,40 +62,30 @@ export default function PaywallModal({ plans, activeCheckoutPlan, onCheckout, on
           </div>
         </div>
 
-        {onFreeSession && (
-          <button
-            type="button"
-            onClick={onFreeSession}
-            disabled={activeCheckoutPlan !== null}
-            className="mt-5 w-full rounded-[24px] border border-accent/25 bg-accent/10 p-4 text-left transition-all duration-200 ease-in-out hover:-translate-y-1 hover:border-accent/35 hover:bg-accent/12"
-          >
-            <p className="text-sm font-medium text-slate-50">Free session</p>
-            <p className="mt-2 text-sm uppercase tracking-[0.16em] text-accent">1 per day</p>
-            <p className="mt-3 text-sm leading-6 text-slate-300">Use the backend's daily free interview access before upgrading.</p>
-            <div className="mt-4 text-sm text-slate-100">Try free access</div>
-          </button>
-        )}
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {plans.map((plan) => (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {accessOptions.map((option) => (
             <button
-              key={plan.planType}
+              key={option.key}
               type="button"
-              onClick={() => onCheckout(plan.planType)}
+              onClick={option.onClick}
               disabled={activeCheckoutPlan !== null}
-              className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4 text-left transition-all duration-200 ease-in-out hover:-translate-y-1 hover:border-accent/25 hover:bg-white/[0.06]"
+              className={`rounded-[24px] border p-4 text-left transition-all duration-200 ease-in-out hover:-translate-y-1 ${
+                option.key === "free"
+                  ? "border-accent/25 bg-accent/10 hover:border-accent/40 hover:bg-accent/20"
+                  : "border-white/10 bg-white/[0.04] hover:border-accent/25 hover:bg-white/[0.06]"
+              }`}
             >
-              <p className="text-sm font-medium text-slate-50">{plan.label}</p>
-              <p className="mt-2 text-sm uppercase tracking-[0.16em] text-accent">{plan.price}</p>
-              <p className="mt-3 text-sm leading-6 text-slate-400">{plan.blurb}</p>
+              <p className="text-sm font-medium text-slate-50">{option.label}</p>
+              <p className="mt-2 text-sm uppercase tracking-[0.16em] text-accent">{option.price}</p>
+              <p className={`mt-3 text-sm leading-6 ${option.key === "free" ? "text-slate-300" : "text-slate-400"}`}>{option.blurb}</p>
               <div className="mt-4 text-sm text-slate-100">
-                {activeCheckoutPlan === plan.planType ? (
+                {option.isLoading ? (
                   <span className="inline-flex items-center gap-2">
                     <Loader2 size={16} className="animate-spin" />
-                    Opening checkout
+                    {option.actionLabel}
                   </span>
                 ) : (
-                  "Continue"
+                  option.actionLabel
                 )}
               </div>
             </button>
