@@ -328,6 +328,29 @@ export default function InterviewPage() {
     setResumeExcerpt(file.name);
   }
 
+  useEffect(() => {
+    if (uiState !== "feedback" || questionNumber < 5) {
+      return;
+    }
+
+    const redirectTimer = window.setTimeout(() => {
+      setAnalysis(null);
+      setTranscript("");
+      navigate("/dashboard");
+    }, 2200);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [navigate, questionNumber, setAnalysis, setTranscript, uiState]);
+
+  const strengthItems =
+    analysis?.content.strengths.length
+      ? analysis.content.strengths.slice(0, 2)
+      : ["Strength not returned by backend yet.", "Strength not returned by backend yet."];
+  const weaknessItems =
+    analysis?.content.issues.length
+      ? analysis.content.issues.slice(0, 2)
+      : ["Weakness not returned by backend yet.", "Weakness not returned by backend yet."];
+
   return (
     <div className="min-h-dvh bg-[#070b14] noise-overlay pb-32">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -512,63 +535,44 @@ export default function InterviewPage() {
                     <p className="text-sm uppercase tracking-[0.2em] text-accent">Feedback ready</p>
                     <h3 className="mt-2 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{analysis.score}/100</h3>
                     <p className="mt-2 text-base text-slate-300">Score for question {questionNumber} of 5</p>
+                    {questionNumber >= 5 && <p className="mt-2 text-sm uppercase tracking-[0.18em] text-amber-200">Final round complete. Redirecting to dashboard...</p>}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUiState("next_question");
-                      window.setTimeout(() => {
-                        if (questionNumber >= 5) {
+                  {questionNumber < 5 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUiState("next_question");
+                        window.setTimeout(() => {
+                          setQuestionNumber((value) => Math.min(5, value + 1));
+                          setUiState("idle");
                           setAnalysis(null);
                           setTranscript("");
-                          navigate("/dashboard");
-                          return;
-                        }
-
-                        setQuestionNumber((value) => Math.min(5, value + 1));
-                        setUiState("idle");
-                        setAnalysis(null);
-                        setTranscript("");
-                        setNotice("Next question loaded. Start when you're ready.");
-                      }, 700);
-                    }}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
-                  >
-                    {questionNumber >= 5 ? "View dashboard" : "Next question"}
-                    <RefreshCw size={18} />
-                  </button>
+                          setNotice("Next question loaded. Start when you're ready.");
+                        }, 700);
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]"
+                    >
+                      Next question
+                      <RefreshCw size={18} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="mt-6 grid gap-4 lg:grid-cols-2">
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Strengths</p>
                     <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {analysis.content.strengths.length > 0 ? (
-                        analysis.content.strengths.slice(0, 2).map((item) => <li key={item}>- {item}</li>)
-                      ) : (
-                        <li className="text-slate-400">Backend did not return strengths for this answer yet.</li>
-                      )}
+                      {strengthItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
                     </ul>
                   </div>
 
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Weak areas</p>
                     <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {analysis.content.issues.length > 0 ? (
-                        analysis.content.issues.slice(0, 2).map((item) => <li key={item}>- {item}</li>)
-                      ) : (
-                        <li className="text-slate-400">Backend did not return weak areas for this answer yet.</li>
-                      )}
+                      {weaknessItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
                     </ul>
                   </div>
-                </div>
-
-                <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Coach summary</p>
-                  <p className="mt-3 text-base leading-8 text-slate-100">
-                    {analysis.content.summary || analysis.followUp.hint || "Backend did not return a summary for this answer yet."}
-                  </p>
                 </div>
               </div>
             ) : (
