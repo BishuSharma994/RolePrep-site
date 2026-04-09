@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import AudioRecorder from "../components/AudioRecorder";
+import SupportFooter from "../components/SupportFooter";
 import UploadBox from "../components/UploadBox";
 import TranscriptPanel from "../components/TranscriptPanel";
 import AnalysisPanel from "../components/AnalysisPanel";
@@ -66,6 +67,21 @@ const PLAN_OPTIONS: Array<{
     label: "Premium",
     price: "Rs 99",
     description: "Unlock the premium plan path and subscription-style access.",
+  },
+];
+
+const VALUE_POINTS = [
+  {
+    label: "Sharper answers",
+    description: "Turn rough thoughts into clear, interview-ready responses with instant feedback.",
+  },
+  {
+    label: "Visible progress",
+    description: "See your stage, questions answered, and access status update as you practice.",
+  },
+  {
+    label: "Personalized prep",
+    description: "Bring your JD, resume, and role context together so every round feels relevant.",
   },
 ];
 
@@ -215,22 +231,23 @@ export default function InterviewPage() {
   const [inputMode, setInputMode] = useState<"record" | "upload">("record");
   const [error, setError] = useState("");
   const [paymentError, setPaymentError] = useState("");
+  const [paymentNotice, setPaymentNotice] = useState("");
   const [isRefreshingSession, setIsRefreshingSession] = useState(false);
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
   const [sessionContextKey, setSessionContextKey] = useState("");
 
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
   const isCompactLayout = device.isMobile || device.isStandalone;
-  const heroTitle = isCompactLayout ? "Interview Studio" : "Premium Interview Studio";
+  const heroTitle = isCompactLayout ? "Interview Copilot" : "Interview Copilot For Serious Practice";
   const heroCopy = isCompactLayout
-    ? "A cleaner mobile command center for live practice, billing, and stage-aware feedback."
-    : "Build a sharper answer flow with a cleaner command center, a visible stage ladder, and live plan status while every answer syncs into your backend session.";
+    ? "Practice with cleaner feedback, visible progress, and premium guidance that feels built around you."
+    : "Practice with the feel of a premium interview coach: sharper answers, visible progress, and a workspace that keeps every round aligned to your goal.";
   const sessionIdentityCopy = isCompactLayout
-    ? "This device is mapped to your backend user."
-    : "Private browser ID connected to your live backend user.";
+    ? "Your private workspace keeps your plan, progress, and current round ready to continue."
+    : "Your private workspace keeps your plan, progress, and current round in sync so you can pick up exactly where you left off.";
   const billingCopy = isCompactLayout
-    ? "Start payment, return here, then refresh to pull credits and plan state."
-    : "Start a Razorpay checkout and then refresh this session after payment.";
+    ? "Unlock more practice instantly and sync your access as soon as payment is confirmed."
+    : "Choose the access level you want, complete checkout, and your practice credits will sync as soon as payment is confirmed.";
   const sessionProgress = useMemo(
     () => getSessionProgress(currentSession, Boolean(analysis)),
     [analysis, currentSession],
@@ -289,6 +306,35 @@ export default function InterviewPage() {
     }
   }, [currentSession?.currentQuestion]);
 
+  useEffect(() => {
+    const handleReturnToApp = async () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      try {
+        const previousPlan = currentPlan;
+        const nextSession = await refreshSessions();
+        const nextPlan = nextSession?.activeSessionPlan || nextSession?.selectedPlan || "free";
+
+        if (previousPlan !== nextPlan && nextPlan !== "free") {
+          setPaymentNotice(`Payment confirmed. ${formatPlanLabel(nextPlan)} is now active.`);
+          setPaymentError("");
+        }
+      } catch {
+        // Silent background sync when the user returns to the app.
+      }
+    };
+
+    window.addEventListener("focus", handleReturnToApp);
+    document.addEventListener("visibilitychange", handleReturnToApp);
+
+    return () => {
+      window.removeEventListener("focus", handleReturnToApp);
+      document.removeEventListener("visibilitychange", handleReturnToApp);
+    };
+  }, [currentPlan]);
+
   const refreshSessions = async () => {
     const sessions = await getSessions(userId);
     setSessions(sessions);
@@ -296,14 +342,25 @@ export default function InterviewPage() {
       setCurrentSession(sessions[0]);
       setSessionContextKey(`${sessions[0].role.trim()}::${sessions[0].jdText.trim()}`);
     }
+
+    return sessions[0] ?? null;
   };
 
   const handleRefreshSession = async () => {
     setPaymentError("");
+    setPaymentNotice("");
     setIsRefreshingSession(true);
 
     try {
-      await refreshSessions();
+      const previousPlan = currentPlan;
+      const nextSession = await refreshSessions();
+      const nextPlan = nextSession?.activeSessionPlan || nextSession?.selectedPlan || "free";
+
+      if (previousPlan !== nextPlan && nextPlan !== "free") {
+        setPaymentNotice(`Plan updated to ${formatPlanLabel(nextPlan)}. Credits and access are now synced.`);
+      } else {
+        setPaymentNotice("Your plan and session access are now refreshed.");
+      }
     } catch (refreshError) {
       setPaymentError(getErrorMessage(refreshError));
     } finally {
@@ -380,7 +437,7 @@ export default function InterviewPage() {
       const { paymentLink } = await createPaymentLink(userId, planType);
 
       if (!paymentLink) {
-        throw new Error("Payment link was not returned by the backend.");
+        throw new Error("Payment could not be started right now. Please try again.");
       }
 
       window.location.href = paymentLink;
@@ -452,11 +509,11 @@ export default function InterviewPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl animate-fade-in px-4 py-5 sm:px-6 sm:py-6">
-        <div className="mb-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
+        <div className="mb-5 grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="self-start overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
             <div className="mb-7 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-xs font-mono uppercase tracking-[0.35em] text-accent">RolePrep</p>
+                <p className="font-display text-xl tracking-[0.22em] text-accent sm:text-2xl">RolePrep</p>
                 <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl sm:tracking-[0.08em] lg:text-6xl">
                   {heroTitle}
                 </h1>
@@ -489,12 +546,21 @@ export default function InterviewPage() {
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-3">
+                  {VALUE_POINTS.map((point) => (
+                    <div key={point.label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent">{point.label}</p>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{point.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 backdrop-blur-xl sm:rounded-[24px] sm:p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Session Identity</p>
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Your Workspace</p>
                     <p className="mt-2 text-xs leading-6 text-slate-300 sm:text-sm">{sessionIdentityCopy}</p>
                   </div>
                   <Sparkles size={18} className="text-amber-300" />
@@ -510,21 +576,21 @@ export default function InterviewPage() {
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-xs font-mono uppercase tracking-[0.2em] text-[#07110c] transition hover:bg-accent-dim sm:text-sm"
                   >
                     <BarChart3 size={16} />
-                    Open Dashboard
+                    View Progress
                   </Link>
                   <p className="text-xs leading-6 text-slate-400">
-                    Billing state, stage progress, and question history all reflect the live session record the backend returns for this user.
+                    Track your progress, credits, and current round in one clean workspace.
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
+          <div className="self-start rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono uppercase tracking-[0.25em] text-slate-400">Access & Billing</p>
-                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Plan Command</h2>
+                <p className="text-xs font-mono uppercase tracking-[0.25em] text-slate-400">Plans & Access</p>
+                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Unlock More Practice</h2>
               </div>
               <Crown size={20} className="text-amber-300" />
             </div>
@@ -532,19 +598,19 @@ export default function InterviewPage() {
             <div className="mt-5 space-y-3">
               <div className="rounded-2xl border border-amber-400/20 bg-amber-400/8 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Selected Plan</p>
+                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Your Plan</p>
                   <CreditCard size={15} className="text-amber-200" />
                 </div>
                 <p className="mt-3 text-xl font-display tracking-[0.06em] text-slate-50 sm:text-2xl sm:tracking-[0.08em]">{formatPlanLabel(currentPlan)}</p>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  Credits: <span className="text-slate-100">{currentSession?.sessionCredits ?? 0}</span>
+                  Practice credits available: <span className="text-slate-100">{currentSession?.sessionCredits ?? 0}</span>
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Upgrade Options</p>
+                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Choose Your Access</p>
                     <p className="mt-1 text-xs leading-5 text-slate-400">{billingCopy}</p>
                   </div>
                   <button
@@ -568,7 +634,7 @@ export default function InterviewPage() {
                         {currentPlan === plan.planType && (
                           <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-accent">
                             <Check size={12} />
-                            Active
+                            Current
                           </span>
                         )}
                       </div>
@@ -598,6 +664,12 @@ export default function InterviewPage() {
                 {paymentError && (
                   <p className="mt-3 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-rose-200">
                     {paymentError}
+                  </p>
+                )}
+
+                {paymentNotice && (
+                  <p className="mt-3 rounded-2xl border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-emerald-200">
+                    {paymentNotice}
                   </p>
                 )}
               </div>
@@ -870,6 +942,8 @@ export default function InterviewPage() {
             )}
           </div>
         </div>
+
+        <SupportFooter />
       </div>
     </div>
   );

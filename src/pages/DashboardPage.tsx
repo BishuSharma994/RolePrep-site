@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ArrowLeft, Calendar, Clock3, Crown, Gauge, Layers3, Sparkles, TrendingUp } from "lucide-react";
+import SupportFooter from "../components/SupportFooter";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { useStore, type Session } from "../store";
 import { getOrCreateLocalUserId, getSessions } from "../services/api";
@@ -140,7 +141,7 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Unable to load sessions from the backend.";
+  return "Unable to load your session data right now.";
 }
 
 function CustomTooltip({
@@ -206,8 +207,8 @@ export default function DashboardPage() {
   const isCompactLayout = device.isMobile || device.isStandalone;
   const pageTitle = isCompactLayout ? "Dashboard" : "Progress Dashboard";
   const pageCopy = isCompactLayout
-    ? "Live session state, credits, and progress tuned for the phone view."
-    : "A clearer command view of plan status, session momentum, stage completion, and answer performance across your current interview track.";
+    ? "See your progress, current question, and access in a cleaner phone-friendly view."
+    : "Track your momentum, answer quality, and stage progress in one polished practice dashboard.";
   const primarySession = displaySessions[0] ?? null;
   const flattenedScores = displaySessions.flatMap((session) => session.scores).map((score) => Math.round(score * 10));
   const averageSessionScore = flattenedScores.length
@@ -477,7 +478,7 @@ export default function DashboardPage() {
 
           {displaySessions.length === 0 && (
             <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] px-6 py-14 text-center text-sm leading-7 text-slate-400 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
-              No live backend sessions were found for this browser user yet.
+              No practice history yet. Start your first session and your progress will show up here.
             </div>
           )}
 
@@ -566,7 +567,7 @@ export default function DashboardPage() {
                     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                       <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Current Question</p>
                       <p className="mt-3 text-sm leading-7 text-slate-200">
-                        {session.currentQuestion || "A new question will appear here when the backend advances the session."}
+                        {session.currentQuestion || "Your next interview question will appear here as you move through practice."}
                       </p>
                     </div>
                   </div>
@@ -575,6 +576,8 @@ export default function DashboardPage() {
             );
           })}
         </div>
+
+        <SupportFooter />
       </div>
     </div>
   );
