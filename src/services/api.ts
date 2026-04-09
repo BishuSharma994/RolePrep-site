@@ -1,9 +1,19 @@
 import axios from "axios";
 import type { AnalysisResult, Session } from "../store";
 
+const USER_ID_STORAGE_KEY = "roleprep_web_user_id";
+const AUTH_STORAGE_KEY = "roleprep_auth_session";
+
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
 });
+
+interface StoredAuthSession {
+  authToken: string;
+  email: string;
+  userId: string;
+  expiresAt: number;
+}
 
 interface BackendSessionPayload {
   user_id?: string;
@@ -23,12 +33,15 @@ interface BackendSessionPayload {
   session_started_at?: number | string | null;
   last_session_activity_at?: number | string | null;
   updated_at?: number | string | null;
+  latest_answer_analysis?: Record<string, unknown> | null;
+  pending_followup?: Record<string, unknown> | null;
 }
 
 interface AnalyzeAudioOptions {
   role: string;
   jdText: string;
   currentQuestion: string;
+  userId?: string;
 }
 
 interface CreateSessionPayload {
@@ -41,6 +54,72 @@ interface CreateSessionPayload {
 }
 
 export type PlanType = "session_10" | "session_29" | "premium";
+
+function readStoredAuthSession(): StoredAuthSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<StoredAuthSession>;
+    if (!parsed.authToken || !parsed.userId) {
+      return null;
+    }
+
+    return {
+      authToken: String(parsed.authToken),
+      email: String(parsed.email ?? ""),
+      userId: String(parsed.userId),
+      expiresAt: Number(parsed.expiresAt ?? 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredAuthSession() {
+  return readStoredAuthSession();
+}
+
+export function getStoredAuthToken() {
+  return readStoredAuthSession()?.authToken ?? "";
+}
+
+export function persistAuthSession(session: StoredAuthSession) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  }
+}
+
+export function clearStoredAuthSession() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+}
+
+export function setLocalUserId(userId: string) {
+  if (typeof window !== "undefined" && userId) {
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, userId);
+  }
+}
+
+export function getPrimaryUserId() {
+  return readStoredAuthSession()?.userId || getOrCreateLocalUserId();
+}
+
+API.interceptors.request.use((config) => {
+  const authToken = getStoredAuthToken();
+  if (authToken) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${authToken}`;
+  }
+  return config;
+});
 
 function clampPercentage(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -99,7 +178,7 @@ function uniqueStrings(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function normalizeSession(session: BackendSessionPayload): Session {
+export function normalizeSessionPayload(session: BackendSessionPayload): Session {
   return {
     userId: String(session.user_id ?? ""),
     sessionId: String(session.session_id ?? ""),
@@ -118,19 +197,20 @@ function normalizeSession(session: BackendSessionPayload): Session {
     sessionStartedAt: session.session_started_at ?? null,
     lastSessionActivityAt: session.last_session_activity_at ?? null,
     updatedAt: session.updated_at ?? null,
+    latestAnswerAnalysis: session.latest_answer_analysis ?? null,
+    pendingFollowup: session.pending_followup ?? null,
   };
 }
 
 export function getOrCreateLocalUserId() {
-  const storageKey = "roleprep_web_user_id";
-  const existing = window.localStorage.getItem(storageKey);
+  const existing = window.localStorage.getItem(USER_ID_STORAGE_KEY);
 
   if (existing) {
     return existing;
   }
 
   const nextValue = crypto.randomUUID();
-  window.localStorage.setItem(storageKey, nextValue);
+  window.localStorage.setItem(USER_ID_STORAGE_KEY, nextValue);
   return nextValue;
 }
 
@@ -147,7 +227,7 @@ export async function createSession({ userId, role, jdText, parserData, resumePa
     jd_path: jdPath,
   });
 
-  return normalizeSession(data.session ?? {});
+  return normalizeSessionPayload(data.session ?? {});
 }
 
 export async function analyzeAudio(file: File, options: AnalyzeAudioOptions) {
@@ -156,6 +236,7 @@ export async function analyzeAudio(file: File, options: AnalyzeAudioOptions) {
   formData.append("role", options.role);
   formData.append("jd_text", options.jdText);
   formData.append("current_question", options.currentQuestion);
+  formData.append("user_id", options.userId ?? getPrimaryUserId());
 
   const { data } = await API.post("/analyze-audio", formData, {
     headers: {
@@ -166,26 +247,97 @@ export async function analyzeAudio(file: File, options: AnalyzeAudioOptions) {
   return data;
 }
 
-export async function getSessions(userId: string) {
+export async function getSessions(userId?: string) {
+  const authToken = getStoredAuthToken();
   const response = await API.get("/sessions", {
-    params: {
-      user_id: userId,
-    },
+    params: authToken ? undefined : { user_id: userId ?? getPrimaryUserId() },
   });
 
   const sessions = Array.isArray(response.data?.sessions) ? response.data.sessions : [];
-  return sessions.map((session: BackendSessionPayload) => normalizeSession(session));
+  return sessions.map((session: BackendSessionPayload) => normalizeSessionPayload(session));
 }
 
 export async function createPaymentLink(userId: string, planType: PlanType) {
+  const authToken = getStoredAuthToken();
   const { data } = await API.post("/payments/link", {
-    user_id: userId,
+    user_id: authToken ? undefined : userId,
     plan_type: planType,
   });
 
   return {
     status: String(data?.status ?? ""),
     paymentLink: String(data?.payment_link ?? ""),
+  };
+}
+
+export async function requestOtp(email: string) {
+  const { data } = await API.post("/auth/request-otp", {
+    email,
+  });
+
+  return {
+    status: String(data?.status ?? ""),
+    email: String(data?.email ?? email),
+    expiresInSeconds: Number(data?.expires_in_seconds ?? 0),
+    debugOtp: data?.debug_otp ? String(data.debug_otp) : "",
+  };
+}
+
+export async function verifyOtp(email: string, otp: string, userId?: string | null) {
+  const { data } = await API.post("/auth/verify-otp", {
+    email,
+    otp,
+    user_id: userId ?? null,
+  });
+
+  return {
+    status: String(data?.status ?? ""),
+    userId: String(data?.user_id ?? ""),
+    email: String(data?.email ?? email),
+    authToken: String(data?.auth_token ?? ""),
+    expiresAt: Number(data?.expires_at ?? 0),
+  };
+}
+
+export async function getAuthSession() {
+  const { data } = await API.get("/auth/session");
+  return {
+    status: String(data?.status ?? ""),
+    userId: String(data?.user_id ?? ""),
+    email: String(data?.email ?? ""),
+    expiresAt: Number(data?.expires_at ?? 0),
+  };
+}
+
+export async function logout() {
+  const { data } = await API.post("/auth/logout");
+  return {
+    status: String(data?.status ?? ""),
+  };
+}
+
+export async function createAccountLinkCode(userId: string) {
+  const { data } = await API.post("/account/link-code", {
+    user_id: userId,
+  });
+
+  return {
+    status: String(data?.status ?? ""),
+    code: String(data?.code ?? ""),
+    expiresAt: Number(data?.expires_at ?? 0),
+    expiresInSeconds: Number(data?.expires_in_seconds ?? 0),
+  };
+}
+
+export async function linkAccount(userId: string, code: string) {
+  const { data } = await API.post("/account/link", {
+    user_id: userId,
+    code,
+  });
+
+  return {
+    status: String(data?.status ?? ""),
+    userId: String(data?.user_id ?? ""),
   };
 }
 

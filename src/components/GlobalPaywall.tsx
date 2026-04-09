@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PaywallModal from "./PaywallModal";
-import { createPaymentLink, getOrCreateLocalUserId, type PlanType } from "../services/api";
+import { createPaymentLink, type PlanType } from "../services/api";
 import { useStore } from "../store";
 import { track } from "../utils/track";
 
@@ -14,9 +14,9 @@ const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: st
 export default function GlobalPaywall() {
   const navigate = useNavigate();
   const isPaywallOpen = useStore((state) => state.isPaywallOpen);
+  const activeUserId = useStore((state) => state.activeUserId);
   const closePaywall = useStore((state) => state.closePaywall);
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
-  const userId = getOrCreateLocalUserId();
 
   useEffect(() => {
     if (isPaywallOpen) {
@@ -33,7 +33,7 @@ export default function GlobalPaywall() {
     track("payment_initiated");
 
     try {
-      const { paymentLink } = await createPaymentLink(userId, planType);
+      const { paymentLink } = await createPaymentLink(activeUserId, planType);
       if (!paymentLink) {
         throw new Error("Unable to open checkout right now.");
       }

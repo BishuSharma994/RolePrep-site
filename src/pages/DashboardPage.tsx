@@ -1,12 +1,11 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { Calendar, Flame, Gauge, Layers3, RotateCcw, Sparkles, Target, TrendingUp } from "lucide-react";
 import ScoreCard from "../components/ScoreCard";
 import ScoreTrendChart from "../components/ScoreTrendChart";
 import SupportFooter from "../components/SupportFooter";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
 import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
-import { getOrCreateLocalUserId, getSessions } from "../services/api";
+import { getSessions } from "../services/api";
 import { useStore, type Session } from "../store";
 import { track } from "../utils/track";
 
@@ -57,13 +56,13 @@ const StageProgress = memo(function StageProgress({ session }: { session: Sessio
 });
 
 export default function DashboardPage() {
+  const activeUserId = useStore((state) => state.activeUserId);
   const sessions = useStore((state) => state.sessions);
   const setSessions = useStore((state) => state.setSessions);
   const device = useDeviceProfile();
   const credits = useStore((state) => state.credits);
   const premiumActive = useStore((state) => state.premiumActive);
   const premiumExpiry = useStore((state) => state.premiumExpiry);
-  const [userId] = useState(() => getOrCreateLocalUserId());
   const [isLoading, setIsLoading] = useState(true);
   const [warning, setWarning] = useState("");
   const startInterview = useStartInterviewAction();
@@ -82,7 +81,7 @@ export default function DashboardPage() {
     const load = async () => {
       setIsLoading(true); setWarning("");
       try {
-        const nextSessions = await getSessions(userId);
+        const nextSessions = await getSessions(activeUserId);
         if (isMounted) setSessions(nextSessions);
       } catch (sessionError) {
         if (isMounted) { setSessions([]); setWarning(errorText(sessionError)); }
@@ -92,7 +91,7 @@ export default function DashboardPage() {
     };
     void load();
     return () => { isMounted = false; };
-  }, [setSessions, userId]);
+  }, [activeUserId, setSessions]);
 
   const recentSessions = useMemo(() => [...sessions].sort((left, right) => epoch(right.updatedAt || right.lastSessionActivityAt || right.sessionStartedAt) - epoch(left.updatedAt || left.lastSessionActivityAt || left.sessionStartedAt)).slice(0, 10), [sessions]);
   const scoreSeries = useMemo(() => recentSessions.filter((session) => session.scores.length > 0).map((session, index) => ({ label: `S${Math.max(1, recentSessions.length - index)}`, score: avgScore(session.scores) })).reverse(), [recentSessions]);

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { Menu, UserRound, X } from "lucide-react";
-import { getOrCreateLocalUserId } from "../services/api";
 import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 import { useStore } from "../store";
 
@@ -14,11 +13,14 @@ function navClassName(isActive: boolean) {
 export default function AppNavbar() {
   const [isOpen, setIsOpen] = useState(false);
   const currentSession = useStore((state) => state.currentSession);
-  const userId = getOrCreateLocalUserId();
+  const activeUserId = useStore((state) => state.activeUserId);
+  const authenticatedEmail = useStore((state) => state.authenticatedEmail);
   const startInterview = useStartInterviewAction();
-  const profileLabel = currentSession?.selectedPlan
-    ? `${currentSession.selectedPlan.replace(/_/g, " ")} user`
-    : "RolePrep account";
+  const profileLabel = authenticatedEmail
+    ? authenticatedEmail
+    : currentSession?.selectedPlan
+      ? `${currentSession.selectedPlan.replace(/_/g, " ")} user`
+      : "RolePrep account";
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/8 bg-[rgba(7,11,20,0.78)] backdrop-blur-xl">
@@ -47,10 +49,10 @@ export default function AppNavbar() {
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
-            title={userId}
+            title={activeUserId}
           >
             <UserRound size={16} />
-            Profile
+            {authenticatedEmail ? "Account" : "Profile"}
           </button>
         </div>
 
@@ -85,7 +87,7 @@ export default function AppNavbar() {
                 <span>Profile</span>
               </div>
               <p className="mt-2 text-sm text-slate-300">{profileLabel}</p>
-              <p className="mt-1 break-all text-xs uppercase tracking-[0.18em] text-slate-500">{userId}</p>
+              <p className="mt-1 break-all text-xs uppercase tracking-[0.18em] text-slate-500">{activeUserId}</p>
             </div>
           </div>
         </div>

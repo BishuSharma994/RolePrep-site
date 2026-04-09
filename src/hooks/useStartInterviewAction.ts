@@ -1,4 +1,4 @@
-import { getOrCreateLocalUserId, getSessions } from "../services/api";
+import { getSessions } from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../store";
 
@@ -13,6 +13,7 @@ export function useStartInterviewAction() {
 
   return async () => {
     const {
+      activeUserId,
       entitlementHydrated,
       openPaywall,
       closePaywall,
@@ -22,7 +23,7 @@ export function useStartInterviewAction() {
 
     if (!entitlementHydrated) {
       try {
-        const sessions = await getSessions(getOrCreateLocalUserId());
+        const sessions = await getSessions(activeUserId);
         setSessions(sessions);
         setCurrentSession(sessions[0] ?? null);
       } catch {

@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import AccountAccessPanel from "./components/AccountAccessPanel";
 import AppNavbar from "./components/AppNavbar";
 import GlobalPaywall from "./components/GlobalPaywall";
 import InstallPrompt from "./components/InstallPrompt";
-import { getOrCreateLocalUserId, getSessions } from "./services/api";
+import { getAuthSession, getOrCreateLocalUserId, getSessions } from "./services/api";
 import { useStore } from "./store";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -24,15 +25,44 @@ function RouteLoader() {
 }
 
 function AppShell() {
+  const authToken = useStore((state) => state.authToken);
   const setSessions = useStore((state) => state.setSessions);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
+  const setAuthSession = useStore((state) => state.setAuthSession);
+  const clearAuthSession = useStore((state) => state.clearAuthSession);
 
   useEffect(() => {
     let isMounted = true;
 
     const bootstrap = async () => {
+      let resolvedUserId = getOrCreateLocalUserId();
+
+      if (authToken) {
+        try {
+          const authSession = await getAuthSession();
+          if (!isMounted) {
+            return;
+          }
+
+          setAuthSession({
+            authToken,
+            email: authSession.email,
+            userId: authSession.userId,
+            expiresAt: authSession.expiresAt,
+          });
+          resolvedUserId = authSession.userId;
+        } catch {
+          if (!isMounted) {
+            return;
+          }
+
+          clearAuthSession();
+          resolvedUserId = useStore.getState().activeUserId || getOrCreateLocalUserId();
+        }
+      }
+
       try {
-        const sessions = await getSessions(getOrCreateLocalUserId());
+        const sessions = await getSessions(resolvedUserId);
         if (!isMounted) {
           return;
         }
@@ -53,11 +83,12 @@ function AppShell() {
     return () => {
       isMounted = false;
     };
-  }, [setCurrentSession, setSessions]);
+  }, [authToken, clearAuthSession, setAuthSession, setCurrentSession, setSessions]);
 
   return (
     <div className="min-h-dvh bg-bg-base">
       <AppNavbar />
+      <AccountAccessPanel />
       <GlobalPaywall />
       <Outlet />
     </div>

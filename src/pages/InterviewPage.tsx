@@ -18,13 +18,13 @@ import {
   analyzeAudio,
   createPaymentLink,
   createSession,
-  getOrCreateLocalUserId,
   getSessions,
   normalizeAnalysisResponse,
+  normalizeSessionPayload,
   type PlanType,
 } from "../services/api";
 import InterviewLayout from "../components/InterviewLayout";
-import { useStore, type Session } from "../store";
+import { useStore } from "../store";
 import { track } from "../utils/track";
 
 type UiState = "idle" | "listening" | "processing" | "feedback" | "next_question";
@@ -71,38 +71,6 @@ function errorText(error: unknown) {
   return error instanceof Error && error.message ? error.message : "Something went wrong. Please try again.";
 }
 
-function applyLocalSessionProgress(session: Session, nextQuestion: string, transcript: string, score: number): Session {
-  const nextQuestionCount = Math.min(5, (session.questionCount ?? 0) + 1);
-
-  return {
-    ...session,
-    currentQuestion: nextQuestion,
-    currentStage: nextQuestionCount >= 5 ? "complete" : "followup",
-    questionCount: nextQuestionCount,
-    history: transcript ? [...session.history, transcript] : session.history,
-    scores: [...session.scores, Number((score / 10).toFixed(1))],
-    updatedAt: Date.now(),
-    lastSessionActivityAt: Date.now(),
-  };
-}
-
-function mergeSessionWithLocalState(incomingSession: Session, localSession: Session | null) {
-  if (!localSession || localSession.sessionId !== incomingSession.sessionId || localSession.questionCount <= incomingSession.questionCount) {
-    return incomingSession;
-  }
-
-  return {
-    ...incomingSession,
-    currentQuestion: localSession.currentQuestion,
-    currentStage: localSession.currentStage,
-    questionCount: localSession.questionCount,
-    history: localSession.history,
-    scores: localSession.scores,
-    updatedAt: localSession.updatedAt,
-    lastSessionActivityAt: localSession.lastSessionActivityAt,
-  };
-}
-
 function isAccessBlockedError(error: unknown) {
   if (!error || typeof error !== "object" || !("response" in error)) {
     return false;
@@ -145,6 +113,8 @@ function isAccessBlockedError(error: unknown) {
 
 export default function InterviewPage() {
   const navigate = useNavigate();
+  const activeUserId = useStore((state) => state.activeUserId);
+  const authToken = useStore((state) => state.authToken);
   const transcript = useStore((state) => state.transcript);
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
@@ -160,7 +130,6 @@ export default function InterviewPage() {
   const device = useDeviceProfile();
   const { state: recorderState, audioBlob, duration, errorMsg, start, stop, reset } = useAudioRecorder();
 
-  const [userId] = useState(() => getOrCreateLocalUserId());
   const [uiState, setUiState] = useState<UiState>("idle");
   const [role, setRole] = useState(() => window.localStorage.getItem("roleprep_role") ?? "");
   const [jdText, setJdText] = useState(() => window.localStorage.getItem("roleprep_jd_text") ?? "");
@@ -201,22 +170,21 @@ export default function InterviewPage() {
   );
 
   const refreshSessions = async () => {
-    const nextSessions = await getSessions(userId);
-    const mergedSessions = nextSessions.length > 0 ? [mergeSessionWithLocalState(nextSessions[0], currentSession), ...nextSessions.slice(1)] : [];
-    setSessions(mergedSessions);
+    const nextSessions = await getSessions(activeUserId);
+    setSessions(nextSessions);
 
-    if (mergedSessions[0]) {
-      setCurrentSession(mergedSessions[0]);
-      setSessionContextKey(`${mergedSessions[0].role.trim()}::${mergedSessions[0].jdText.trim()}`);
-      if (mergedSessions[0].currentQuestion) {
-        setQuestion(mergedSessions[0].currentQuestion);
+    if (nextSessions[0]) {
+      setCurrentSession(nextSessions[0]);
+      setSessionContextKey(`${nextSessions[0].role.trim()}::${nextSessions[0].jdText.trim()}`);
+      if (nextSessions[0].currentQuestion) {
+        setQuestion(nextSessions[0].currentQuestion);
       }
     } else {
       setCurrentSession(null);
       setSessionContextKey("");
     }
 
-    return mergedSessions[0] ?? null;
+    return nextSessions[0] ?? null;
   };
 
   useEffect(() => window.localStorage.setItem("roleprep_role", role), [role]);
@@ -224,7 +192,7 @@ export default function InterviewPage() {
   useEffect(() => window.localStorage.setItem("roleprep_resume_notes", resumeNotes), [resumeNotes]);
   useEffect(() => {
     void refreshSessions();
-  }, []);
+  }, [activeUserId, authToken]);
 
   useEffect(() => {
     if (currentSession?.currentQuestion) {
@@ -253,13 +221,13 @@ export default function InterviewPage() {
 
   async function ensureSession() {
     const contextKey = `${role.trim()}::${jdText.trim()}`;
-    if (currentSession && currentSession.userId === userId && contextKey === sessionContextKey) {
+    if (currentSession && currentSession.userId === activeUserId && contextKey === sessionContextKey) {
       return currentSession;
     }
 
     try {
       const session = await createSession({
-        userId,
+        userId: activeUserId,
         role: role.trim(),
         jdText: jdText.trim(),
         resumePath: resumeFile?.name,
@@ -298,7 +266,7 @@ export default function InterviewPage() {
     setTranscript("");
 
     try {
-      const session = await ensureSession();
+      await ensureSession();
       const processingStartedAt = Date.now();
 
       const file =
@@ -313,6 +281,7 @@ export default function InterviewPage() {
         role: role.trim(),
         jdText: jdText.trim(),
         currentQuestion: question,
+        userId: activeUserId,
       });
 
       const normalized = normalizeAnalysisResponse(response);
@@ -320,14 +289,43 @@ export default function InterviewPage() {
       if (remainingDelay > 0) {
         await new Promise((resolve) => window.setTimeout(resolve, remainingDelay));
       }
-      const fallbackQuestion = QUESTIONS[Math.min(QUESTIONS.length - 1, session.questionCount + 1)] ?? question;
-      const nextQuestion = normalized.analysis.followUp.question.trim() || fallbackQuestion || question;
-      const nextSession = applyLocalSessionProgress(session, nextQuestion, normalized.transcript, normalized.analysis.score);
       setTranscript(normalized.transcript);
       setAnalysis(normalized.analysis);
-      setQuestion(nextQuestion);
-      setCurrentSession(nextSession);
-      setSessions([nextSession, ...sessions.filter((entry) => entry.sessionId !== nextSession.sessionId)]);
+
+      const responsePayload = response as {
+        session_updated?: boolean;
+        session?: Record<string, unknown>;
+      };
+
+      if (responsePayload.session_updated) {
+        try {
+          const refreshedSession = await refreshSessions();
+          if (refreshedSession?.currentQuestion) {
+            setQuestion(refreshedSession.currentQuestion);
+          }
+        } catch {
+          if (responsePayload.session) {
+            const fallbackSession = normalizeSessionPayload(responsePayload.session);
+            setCurrentSession(fallbackSession);
+            setSessions([fallbackSession, ...sessions.filter((entry) => entry.sessionId !== fallbackSession.sessionId)]);
+            if (fallbackSession.currentQuestion) {
+              setQuestion(fallbackSession.currentQuestion);
+            }
+          } else if (normalized.analysis.followUp.question) {
+            setQuestion(normalized.analysis.followUp.question);
+          }
+        }
+      } else if (responsePayload.session) {
+        const nextSession = normalizeSessionPayload(responsePayload.session);
+        setCurrentSession(nextSession);
+        setSessions([nextSession, ...sessions.filter((entry) => entry.sessionId !== nextSession.sessionId)]);
+        if (nextSession.currentQuestion) {
+          setQuestion(nextSession.currentQuestion);
+        }
+      } else if (normalized.analysis.followUp.question) {
+        setQuestion(normalized.analysis.followUp.question);
+      }
+
       if (normalized.transcript.trim().split(/\s+/).filter(Boolean).length < 4) {
         setNotice("Transcript was very short. Review the score carefully before trusting it.");
       }
@@ -409,7 +407,7 @@ export default function InterviewPage() {
     track("payment_initiated");
 
     try {
-      const { paymentLink } = await createPaymentLink(userId, planType);
+      const { paymentLink } = await createPaymentLink(activeUserId, planType);
       if (!paymentLink) throw new Error("Unable to open checkout right now.");
       window.location.href = paymentLink;
     } catch (checkoutError) {

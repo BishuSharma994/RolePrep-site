@@ -1,5 +1,15 @@
 import { create } from "zustand";
 
+const USER_ID_STORAGE_KEY = "roleprep_web_user_id";
+const AUTH_STORAGE_KEY = "roleprep_auth_session";
+
+interface StoredAuthSession {
+  authToken: string;
+  email: string;
+  userId: string;
+  expiresAt: number;
+}
+
 export interface AnalysisResult {
   score: number;
   content: {
@@ -41,6 +51,68 @@ export interface Session {
   sessionStartedAt: number | string | null;
   lastSessionActivityAt: number | string | null;
   updatedAt: number | string | null;
+  latestAnswerAnalysis?: Record<string, unknown> | null;
+  pendingFollowup?: Record<string, unknown> | null;
+}
+
+function readStoredAuthSession(): StoredAuthSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<StoredAuthSession>;
+    if (!parsed.authToken || !parsed.userId) {
+      return null;
+    }
+
+    return {
+      authToken: String(parsed.authToken),
+      email: String(parsed.email ?? ""),
+      userId: String(parsed.userId),
+      expiresAt: Number(parsed.expiresAt ?? 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function ensureStoredUserId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const existingUserId = window.localStorage.getItem(USER_ID_STORAGE_KEY);
+  if (existingUserId) {
+    return existingUserId;
+  }
+
+  const nextUserId = crypto.randomUUID();
+  window.localStorage.setItem(USER_ID_STORAGE_KEY, nextUserId);
+  return nextUserId;
+}
+
+function persistUserId(userId: string) {
+  if (typeof window !== "undefined" && userId) {
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, userId);
+  }
+}
+
+function persistAuthSession(session: StoredAuthSession) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  }
+}
+
+function clearStoredAuthSession() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
 }
 
 function toExpiryTimestamp(value: number | string | null | undefined) {
@@ -69,6 +141,11 @@ function deriveEntitlement(session: Session | null) {
 }
 
 interface AppState {
+  activeUserId: string;
+  authToken: string | null;
+  authenticatedEmail: string;
+  authenticatedUserId: string;
+  authExpiry: number;
   transcript: string;
   analysis: AnalysisResult | null;
   currentSession: Session | null;
@@ -80,6 +157,9 @@ interface AppState {
   entitlementHydrated: boolean;
   isPaywallOpen: boolean;
 
+  setActiveUserId: (userId: string) => void;
+  setAuthSession: (session: { authToken: string; email: string; userId: string; expiresAt: number }) => void;
+  clearAuthSession: () => void;
   setTranscript: (transcript: string) => void;
   setAnalysis: (analysis: AnalysisResult | null) => void;
   setCurrentSession: (session: Session | null) => void;
@@ -91,6 +171,9 @@ interface AppState {
   syncEntitlement: (session: Session | null) => void;
   reset: () => void;
 }
+
+const initialAuthSession = readStoredAuthSession();
+const initialUserId = initialAuthSession?.userId || ensureStoredUserId();
 
 function upsertSession(existingSessions: Session[], nextSession: Session) {
   const index = existingSessions.findIndex((session) => session.sessionId === nextSession.sessionId);
@@ -105,6 +188,11 @@ function upsertSession(existingSessions: Session[], nextSession: Session) {
 }
 
 export const useStore = create<AppState>((set) => ({
+  activeUserId: initialUserId,
+  authToken: initialAuthSession?.authToken ?? null,
+  authenticatedEmail: initialAuthSession?.email ?? "",
+  authenticatedUserId: initialAuthSession?.userId ?? "",
+  authExpiry: initialAuthSession?.expiresAt ?? 0,
   transcript: "",
   analysis: null,
   currentSession: null,
@@ -116,29 +204,71 @@ export const useStore = create<AppState>((set) => ({
   entitlementHydrated: false,
   isPaywallOpen: false,
 
+  setActiveUserId: (userId) => {
+    persistUserId(userId);
+    set({ activeUserId: userId });
+  },
+  setAuthSession: ({ authToken, email, userId, expiresAt }) => {
+    persistUserId(userId);
+    persistAuthSession({ authToken, email, userId, expiresAt });
+    set({
+      activeUserId: userId,
+      authToken,
+      authenticatedEmail: email,
+      authenticatedUserId: userId,
+      authExpiry: expiresAt,
+    });
+  },
+  clearAuthSession: () => {
+    clearStoredAuthSession();
+    const fallbackUserId = ensureStoredUserId();
+    set({
+      activeUserId: fallbackUserId,
+      authToken: null,
+      authenticatedEmail: "",
+      authenticatedUserId: "",
+      authExpiry: 0,
+    });
+  },
   setTranscript: (transcript) => set({ transcript }),
   setAnalysis: (analysis) => set({ analysis }),
-  setCurrentSession: (currentSession) =>
-    set(() => ({
+  setCurrentSession: (currentSession) => {
+    if (currentSession?.userId) {
+      persistUserId(currentSession.userId);
+    }
+
+    set((state) => ({
+      activeUserId: currentSession?.userId || state.activeUserId,
       currentSession,
       entitlementHydrated: true,
       ...deriveEntitlement(currentSession),
-    })),
+    }));
+  },
   setSessions: (sessions) =>
     set((state) => {
-      const source = state.currentSession ?? sessions[0] ?? null;
+      const source = sessions[0] ?? state.currentSession ?? null;
+      const nextUserId = sessions[0]?.userId ?? state.activeUserId;
+      persistUserId(nextUserId);
       return {
+        activeUserId: nextUserId,
         sessions,
         entitlementHydrated: true,
         ...deriveEntitlement(source),
       };
     }),
   addSession: (session) =>
-    set((state) => ({
-      sessions: upsertSession(state.sessions, session),
-      entitlementHydrated: true,
-      ...deriveEntitlement(state.currentSession ?? session),
-    })),
+    set((state) => {
+      if (session.userId) {
+        persistUserId(session.userId);
+      }
+
+      return {
+        activeUserId: session.userId || state.activeUserId,
+        sessions: upsertSession(state.sessions, session),
+        entitlementHydrated: true,
+        ...deriveEntitlement(state.currentSession ?? session),
+      };
+    }),
   setIsAnalyzing: (isAnalyzing) => set({ isAnalyzing }),
   openPaywall: () => set({ isPaywallOpen: true }),
   closePaywall: () => set({ isPaywallOpen: false }),
