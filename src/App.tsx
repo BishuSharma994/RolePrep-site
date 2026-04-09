@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import AccountAccessPanel from "./components/AccountAccessPanel";
 import AppNavbar from "./components/AppNavbar";
 import GlobalPaywall from "./components/GlobalPaywall";
@@ -117,6 +117,37 @@ function AppShell() {
   );
 }
 
+function ProtectedRoute({ children }: { children: JSX.Element }) {
+  const location = useLocation();
+  const authToken = useStore((state) => state.authToken);
+  const openAccountAccess = useStore((state) => state.openAccountAccess);
+  const closePaywall = useStore((state) => state.closePaywall);
+  const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
+  const setPendingRoute = useStore((state) => state.setPendingRoute);
+
+  useEffect(() => {
+    if (!authToken) {
+      closePaywall();
+      if (location.pathname === "/interview") {
+        setPendingRoute(null);
+        setPendingStartInterview(true);
+        openAccountAccess(true);
+        return;
+      }
+
+      setPendingRoute(`${location.pathname}${location.search}${location.hash}`);
+      setPendingStartInterview(false);
+      openAccountAccess(false);
+    }
+  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, setPendingRoute, setPendingStartInterview]);
+
+  if (!authToken) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -125,9 +156,30 @@ function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/interview" element={<InterviewPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/resume" element={<ResumePage />} />
+            <Route
+              path="/interview"
+              element={(
+                <ProtectedRoute>
+                  <InterviewPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/dashboard"
+              element={(
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              )}
+            />
+            <Route
+              path="/resume"
+              element={(
+                <ProtectedRoute>
+                  <ResumePage />
+                </ProtectedRoute>
+              )}
+            />
           </Route>
         </Routes>
       </Suspense>

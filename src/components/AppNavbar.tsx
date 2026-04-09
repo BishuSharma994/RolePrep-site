@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Menu, UserRound, X } from "lucide-react";
 import { useStartInterviewAction } from "../hooks/useStartInterviewAction";
 import { useStore } from "../store";
@@ -12,16 +12,29 @@ function navClassName(isActive: boolean) {
 
 export default function AppNavbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+  const authToken = useStore((state) => state.authToken);
   const currentSession = useStore((state) => state.currentSession);
   const activeUserId = useStore((state) => state.activeUserId);
   const authenticatedEmail = useStore((state) => state.authenticatedEmail);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
+  const setPendingRoute = useStore((state) => state.setPendingRoute);
   const startInterview = useStartInterviewAction();
   const profileLabel = authenticatedEmail
     ? authenticatedEmail
     : currentSession?.selectedPlan
       ? `${currentSession.selectedPlan.replace(/_/g, " ")} user`
       : "RolePrep account";
+
+  const handleProtectedNavigation = (path: string) => {
+    if (authToken) {
+      return;
+    }
+
+    setPendingRoute(path);
+    setIsOpen(false);
+    openAccountAccess(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/8 bg-[rgba(7,11,20,0.78)] backdrop-blur-xl">
@@ -37,10 +50,28 @@ export default function AppNavbar() {
         </Link>
 
         <div className="hidden items-center gap-2 md:flex">
-          <NavLink to="/dashboard" className={({ isActive }) => navClassName(isActive)}>
+          <NavLink
+            to="/dashboard"
+            className={({ isActive }) => navClassName(isActive)}
+            onClick={(event) => {
+              if (!authToken) {
+                event.preventDefault();
+                handleProtectedNavigation("/dashboard");
+              }
+            }}
+          >
             Dashboard
           </NavLink>
-          <NavLink to="/resume" className={({ isActive }) => navClassName(isActive)}>
+          <NavLink
+            to="/resume"
+            className={({ isActive }) => navClassName(isActive)}
+            onClick={(event) => {
+              if (!authToken) {
+                event.preventDefault();
+                handleProtectedNavigation("/resume");
+              }
+            }}
+          >
             Resume
           </NavLink>
           <button
@@ -83,10 +114,34 @@ export default function AppNavbar() {
       {isOpen && (
         <div className="border-t border-white/8 bg-[rgba(7,11,20,0.92)] px-4 py-4 md:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-3">
-            <NavLink to="/dashboard" className={({ isActive }) => navClassName(isActive)} onClick={() => setIsOpen(false)}>
+            <NavLink
+              to="/dashboard"
+              className={() => navClassName(location.pathname === "/dashboard")}
+              onClick={(event) => {
+                if (!authToken) {
+                  event.preventDefault();
+                  handleProtectedNavigation("/dashboard");
+                  return;
+                }
+
+                setIsOpen(false);
+              }}
+            >
               Dashboard
             </NavLink>
-            <NavLink to="/resume" className={({ isActive }) => navClassName(isActive)} onClick={() => setIsOpen(false)}>
+            <NavLink
+              to="/resume"
+              className={() => navClassName(location.pathname === "/resume")}
+              onClick={(event) => {
+                if (!authToken) {
+                  event.preventDefault();
+                  handleProtectedNavigation("/resume");
+                  return;
+                }
+
+                setIsOpen(false);
+              }}
+            >
               Resume
             </NavLink>
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-200">

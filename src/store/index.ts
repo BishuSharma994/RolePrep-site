@@ -163,6 +163,7 @@ interface AppState {
   isPaywallOpen: boolean;
   isAccountAccessOpen: boolean;
   pendingStartInterview: boolean;
+  pendingRoute: string | null;
 
   setActiveUserId: (userId: string) => void;
   setAuthSession: (session: { authToken: string; email: string; userId: string; expiresAt: number }) => void;
@@ -171,6 +172,7 @@ interface AppState {
   openAccountAccess: (pendingStartInterview?: boolean) => void;
   closeAccountAccess: () => void;
   setPendingStartInterview: (value: boolean) => void;
+  setPendingRoute: (route: string | null) => void;
   setTranscript: (transcript: string) => void;
   setAnalysis: (analysis: AnalysisResult | null) => void;
   setCurrentSession: (session: Session | null) => void;
@@ -221,6 +223,7 @@ export const useStore = create<AppState>((set) => ({
   isPaywallOpen: false,
   isAccountAccessOpen: false,
   pendingStartInterview: false,
+  pendingRoute: null,
 
   setActiveUserId: (userId) => {
     persistUserId(userId);
@@ -263,6 +266,7 @@ export const useStore = create<AppState>((set) => ({
     })),
   closeAccountAccess: () => set({ isAccountAccessOpen: false }),
   setPendingStartInterview: (pendingStartInterview) => set({ pendingStartInterview }),
+  setPendingRoute: (pendingRoute) => set({ pendingRoute }),
   setTranscript: (transcript) => set({ transcript }),
   setAnalysis: (analysis) => set({ analysis }),
   setCurrentSession: (currentSession) => {

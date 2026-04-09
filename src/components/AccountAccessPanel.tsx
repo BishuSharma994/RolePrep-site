@@ -74,6 +74,7 @@ export default function AccountAccessPanel() {
   const accountSyncEnabled = useStore((state) => state.accountSyncEnabled);
   const isAccountAccessOpen = useStore((state) => state.isAccountAccessOpen);
   const pendingStartInterview = useStore((state) => state.pendingStartInterview);
+  const pendingRoute = useStore((state) => state.pendingRoute);
   const setAuthSession = useStore((state) => state.setAuthSession);
   const clearAuthSession = useStore((state) => state.clearAuthSession);
   const setActiveUserId = useStore((state) => state.setActiveUserId);
@@ -82,6 +83,7 @@ export default function AccountAccessPanel() {
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const closeAccountAccess = useStore((state) => state.closeAccountAccess);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
+  const setPendingRoute = useStore((state) => state.setPendingRoute);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [syncCodeInput, setSyncCodeInput] = useState("");
@@ -109,14 +111,29 @@ export default function AccountAccessPanel() {
 
   const finishSuccessfulAuth = async (nextUserId: string) => {
     await refreshSessionsForUser(nextUserId);
-    setNotice("Signed in successfully.");
 
     if (pendingStartInterview) {
+      setPendingRoute(null);
       setPendingStartInterview(false);
       closeAccountAccess();
       await continueStartInterviewFlow(navigate);
       return;
     }
+
+    if (pendingRoute) {
+      const nextRoute = pendingRoute;
+      setPendingRoute(null);
+      closeAccountAccess();
+      if (nextRoute === "/interview") {
+        await continueStartInterviewFlow(navigate);
+        return;
+      }
+
+      navigate(nextRoute);
+      return;
+    }
+
+    closeAccountAccess();
   };
 
   const handleSendOtp = async () => {
@@ -208,12 +225,24 @@ export default function AccountAccessPanel() {
       await refreshSessionsForUser(response.userId);
       setSyncCodeInput("");
 
-      if (pendingStartInterview && !authToken && (authRequired || !anonymousModeAllowed)) {
-        setNotice("Device linked. Login is still required before starting the interview.");
+      if ((pendingStartInterview || pendingRoute) && !authToken) {
+        setNotice("Device linked. Login is still required before continuing.");
       } else if (pendingStartInterview) {
+        setPendingRoute(null);
         setPendingStartInterview(false);
         closeAccountAccess();
         await continueStartInterviewFlow(navigate);
+        return;
+      } else if (pendingRoute) {
+        const nextRoute = pendingRoute;
+        setPendingRoute(null);
+        closeAccountAccess();
+        if (nextRoute === "/interview") {
+          await continueStartInterviewFlow(navigate);
+          return;
+        }
+
+        navigate(nextRoute);
         return;
       } else {
         setNotice("This device is now linked to your account.");
@@ -242,6 +271,7 @@ export default function AccountAccessPanel() {
       await refreshSessionsForUser(fallbackUserId);
       setLoggingOut(false);
       setPendingStartInterview(false);
+      setPendingRoute(null);
       closeAccountAccess();
       setNotice(anonymousModeAllowed ? "Signed out. Anonymous mode is still available on this device." : "Signed out.");
     }
@@ -249,6 +279,7 @@ export default function AccountAccessPanel() {
 
   const handleClose = () => {
     setPendingStartInterview(false);
+    setPendingRoute(null);
     closeAccountAccess();
   };
 
