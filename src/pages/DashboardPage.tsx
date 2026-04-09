@@ -1,172 +1,62 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { ArrowLeft, Calendar, Clock3, Crown, Gauge, Layers3, Sparkles, TrendingUp } from "lucide-react";
+import { Calendar, Flame, Gauge, Layers3, RotateCcw, Sparkles, Target, TrendingUp } from "lucide-react";
+import ScoreCard from "../components/ScoreCard";
+import ScoreTrendChart from "../components/ScoreTrendChart";
 import SupportFooter from "../components/SupportFooter";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
-import { useStore, type Session } from "../store";
 import { getOrCreateLocalUserId, getSessions } from "../services/api";
-import ScoreCard from "../components/ScoreCard";
+import { useStore, type Session } from "../store";
 
-const STAGE_ORDER = ["setup", "resume_session", "warmup", "core", "followup", "complete"];
-
-function toEpoch(value: number | string | null) {
-  if (typeof value === "number") {
-    return value > 10_000_000_000 ? value : value * 1000;
-  }
-
-  if (typeof value === "string" && value) {
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? Date.now() : parsed;
-  }
-
-  return Date.now();
-}
-
-function formatDate(value: number | string | null) {
-  return new Date(toEpoch(value)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatDateTime(value: number | string | null) {
-  return new Date(toEpoch(value)).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatPlanLabel(plan: string) {
-  if (!plan) {
-    return "Free";
-  }
-
-  if (plan === "session_10") {
-    return "Session 10";
-  }
-
-  if (plan === "session_29") {
-    return "Session 29";
-  }
-
-  return plan.replace(/_/g, " ").replace(/\b\w/g, (value) => value.toUpperCase());
-}
-
-function formatStageLabel(stage: string) {
-  if (!stage) {
-    return "Setup";
-  }
-
-  return stage.replace(/_/g, " ").replace(/\b\w/g, (value) => value.toUpperCase());
-}
-
-function averageScore(scores: number[]) {
-  if (!scores.length) {
-    return 0;
-  }
-
-  return Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 10);
-}
-
-function getBestScore(scores: number[]) {
-  if (!scores.length) {
-    return 0;
-  }
-
-  return Math.round(Math.max(...scores) * 10);
-}
-
-function getStageIndex(stage: string, questionCount: number) {
-  const exactMatch = STAGE_ORDER.findIndex((entry) => entry === stage);
-  if (exactMatch >= 0) {
-    return exactMatch;
-  }
-
-  if (questionCount >= 6) return 5;
-  if (questionCount >= 4) return 4;
-  if (questionCount >= 2) return 3;
-  if (questionCount >= 1) return 2;
-  return 0;
-}
-
-function getSessionProgress(session: Session) {
-  const stageIndex = getStageIndex(session.currentStage, session.questionCount);
-  const stageProgress = ((stageIndex + 1) / STAGE_ORDER.length) * 100;
-  const questionProgress = Math.min(100, session.questionCount * 18);
-  return Math.max(12, Math.min(100, Math.round(Math.max(stageProgress, questionProgress))));
-}
-
-function getPlanAccent(plan: string) {
-  const normalized = plan.toLowerCase();
-
-  if (normalized.includes("premium")) {
-    return "border-amber-400/30 bg-amber-400/10 text-amber-200";
-  }
-
-  if (normalized.includes("session")) {
-    return "border-sky-400/30 bg-sky-400/10 text-sky-200";
-  }
-
-  return "border-white/10 bg-white/5 text-text-secondary";
-}
-
-function getStageTone(isActive: boolean, isComplete: boolean) {
-  if (isActive) {
-    return "border-accent/40 bg-accent/12 text-accent";
-  }
-
-  if (isComplete) {
-    return "border-white/12 bg-white/6 text-text-primary";
-  }
-
-  return "border-white/8 bg-white/[0.03] text-text-dim";
-}
-
-function getErrorMessage(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "response" in error &&
-    error.response &&
-    typeof error.response === "object" &&
-    "data" in error.response
-  ) {
+const STAGES = ["setup", "warmup", "core", "followup", "complete"];
+const epoch = (value: number | string | null) => typeof value === "number" ? (value > 10_000_000_000 ? value : value * 1000) : typeof value === "string" && value ? (Number.isNaN(Date.parse(value)) ? Date.now() : Date.parse(value)) : Date.now();
+const dateLabel = (value: number | string | null) => new Date(epoch(value)).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const stageLabel = (stage: string) => (!stage ? "setup" : stage === "resume_session" ? "warmup" : stage).replace(/_/g, " ");
+const stageIndex = (stage: string) => Math.max(0, STAGES.indexOf(stageLabel(stage)));
+const avgScore = (scores: number[]) => scores.length ? Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 10) : 0;
+function errorText(error: unknown) {
+  if (error && typeof error === "object" && "response" in error && error.response && typeof error.response === "object" && "data" in error.response) {
     const data = error.response.data as { detail?: string };
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
+    if (typeof data?.detail === "string") return data.detail;
   }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
+  return error instanceof Error && error.message ? error.message : "Unable to load dashboard data right now.";
+}
+function streakCount(sessions: Session[]) {
+  if (!sessions.length) return 0;
+  const uniqueDays = [...new Set(sessions.map((session) => new Date(epoch(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)).toDateString()))].map((value) => new Date(value).getTime()).sort((a, b) => b - a);
+  let streak = 1;
+  for (let index = 1; index < uniqueDays.length; index += 1) {
+    if (Math.round((uniqueDays[index - 1] - uniqueDays[index]) / 86400000) === 1) streak += 1;
+    else break;
   }
-
-  return "Unable to load your session data right now.";
+  return streak;
+}
+function weakAreas(sessions: Session[]) {
+  const tags = new Set<string>();
+  const rawScores = sessions.flatMap((session) => session.scores);
+  const avg = rawScores.length ? rawScores.reduce((sum, score) => sum + score, 0) / rawScores.length : 0;
+  if (avg < 7) tags.add("Communication");
+  if (sessions.some((session) => session.questionCount < 2)) tags.add("Consistency");
+  if (sessions.some((session) => stageLabel(session.currentStage) === "warmup")) tags.add("Technical depth");
+  if (sessions.some((session) => session.activeSession && session.questionCount <= 1)) tags.add("Confidence");
+  if (sessions.some((session) => session.scores.length > 0 && Math.max(...session.scores) - Math.min(...session.scores) > 2.5)) tags.add("Answer structure");
+  if (!tags.size) ["Consistency", "Technical depth", "Confidence"].forEach((tag) => tags.add(tag));
+  return [...tags].slice(0, 5);
 }
 
-function CustomTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: Array<{ value: number }>;
-  label?: string;
-}) {
-  if (!active || !payload?.length) {
-    return null;
-  }
-
+const StageProgress = memo(function StageProgress({ session }: { session: Session | null }) {
+  const active = stageIndex(session?.currentStage || "setup");
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#101726] px-3 py-2 text-xs font-mono shadow-xl">
-      <p className="mb-1 text-text-secondary">{label}</p>
-      <p className="text-accent">Score: {payload[0]?.value}</p>
+    <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-center justify-between"><div><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current stage</p><h3 className="mt-2 text-2xl font-medium text-slate-50">{stageLabel(session?.currentStage || "setup")}</h3></div><Target size={18} className="text-accent" /></div>
+      <div className="mt-5 grid gap-2 sm:grid-cols-5">{STAGES.map((stage, index) => <div key={stage} className={`rounded-[20px] border px-3 py-3 text-center text-sm uppercase tracking-[0.16em] transition-all duration-200 ease-in-out ${index < active ? "border-white/12 bg-white/[0.08] text-slate-100" : index === active ? "border-accent/30 bg-accent/12 text-accent" : "border-white/8 bg-white/[0.03] text-slate-500"}`}>{stage}</div>)}</div>
     </div>
   );
-}
+});
 
 export default function DashboardPage() {
-  const { sessions, setSessions } = useStore();
+  const sessions = useStore((state) => state.sessions);
+  const setSessions = useStore((state) => state.setSessions);
   const device = useDeviceProfile();
   const [userId] = useState(() => getOrCreateLocalUserId());
   const [isLoading, setIsLoading] = useState(true);
@@ -174,408 +64,92 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
-
-    const loadSessions = async () => {
-      setIsLoading(true);
-      setWarning("");
-
+    const load = async () => {
+      setIsLoading(true); setWarning("");
       try {
-        const data = await getSessions(userId);
-        if (isMounted) {
-          setSessions(data);
-        }
+        const nextSessions = await getSessions(userId);
+        if (isMounted) setSessions(nextSessions);
       } catch (sessionError) {
-        if (isMounted) {
-          setWarning(getErrorMessage(sessionError));
-          setSessions([]);
-        }
+        if (isMounted) { setSessions([]); setWarning(errorText(sessionError)); }
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
-    loadSessions();
-
-    return () => {
-      isMounted = false;
-    };
+    void load();
+    return () => { isMounted = false; };
   }, [setSessions, userId]);
 
-  const displaySessions: Session[] = sessions;
-  const isCompactLayout = device.isMobile || device.isStandalone;
-  const pageTitle = isCompactLayout ? "Dashboard" : "Progress Dashboard";
-  const pageCopy = isCompactLayout
-    ? "See your progress, current question, and access in a cleaner phone-friendly view."
-    : "Track your momentum, answer quality, and stage progress in one polished practice dashboard.";
-  const primarySession = displaySessions[0] ?? null;
-  const flattenedScores = displaySessions.flatMap((session) => session.scores).map((score) => Math.round(score * 10));
-  const averageSessionScore = flattenedScores.length
-    ? Math.round(flattenedScores.reduce((total, score) => total + score, 0) / flattenedScores.length)
-    : 0;
-  const bestSessionScore = flattenedScores.length ? Math.max(...flattenedScores) : 0;
-  const totalQuestions = displaySessions.reduce((total, session) => total + session.questionCount, 0);
-  const activeSessions = displaySessions.filter((session) => session.activeSession).length;
-  const stageBreakdown = useMemo(
-    () =>
-      STAGE_ORDER.map((stage) => ({
-        stage,
-        count: displaySessions.filter((session) => getStageIndex(session.currentStage, session.questionCount) >= STAGE_ORDER.indexOf(stage)).length,
-      })),
-    [displaySessions],
-  );
-  const chartData = displaySessions
-    .filter((session) => session.scores.length > 0)
-    .map((session) => ({
-      date: formatDate(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt),
-      score: averageScore(session.scores),
-    }));
+  const recentSessions = useMemo(() => [...sessions].sort((left, right) => epoch(right.updatedAt || right.lastSessionActivityAt || right.sessionStartedAt) - epoch(left.updatedAt || left.lastSessionActivityAt || left.sessionStartedAt)).slice(0, 10), [sessions]);
+  const scoreSeries = useMemo(() => recentSessions.filter((session) => session.scores.length > 0).map((session, index) => ({ label: `S${Math.max(1, recentSessions.length - index)}`, score: avgScore(session.scores) })).reverse(), [recentSessions]);
+  const totalInterviews = recentSessions.length;
+  const average = scoreSeries.length ? Math.round(scoreSeries.reduce((sum, point) => sum + point.score, 0) / scoreSeries.length) : 0;
+  const streak = streakCount(recentSessions);
+  const areas = weakAreas(recentSessions);
+  const currentSession = recentSessions[0] ?? null;
+  const mobileChartHeight = device.isMobile || device.isStandalone ? 220 : 280;
 
   if (isLoading) {
-    return (
-      <div className="min-h-dvh bg-[#070b14] noise-overlay">
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
-          <div className="mb-5 flex items-center justify-between rounded-[24px] border border-white/10 bg-[#101726] p-5 sm:mb-6 sm:rounded-[28px] sm:p-6">
-            <div>
-              <p className="text-xs font-mono uppercase tracking-[0.3em] text-accent">RolePrep</p>
-              <h1 className="mt-2 font-display text-3xl tracking-[0.06em] text-slate-50 sm:text-4xl sm:tracking-[0.08em]">Dashboard</h1>
-            </div>
-
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-mono uppercase tracking-[0.18em] text-text-secondary transition hover:border-white/20 hover:text-text-primary"
-            >
-              <ArrowLeft size={16} />
-              Interview
-            </Link>
-          </div>
-
-          <div className="space-y-4 animate-pulse">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-24 rounded-[24px] border border-white/8 bg-white/[0.03]" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="min-h-dvh bg-[#070b14] noise-overlay"><div className="mx-auto max-w-7xl px-4 py-6 sm:px-6"><div className="grid gap-4 sm:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-[28px] border border-white/10 bg-white/[0.03]" />)}</div></div></div>;
   }
 
   return (
     <div className="min-h-dvh bg-[#070b14] noise-overlay">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.18),_transparent_38%),radial-gradient(circle_at_15%_20%,_rgba(0,255,136,0.12),_transparent_28%),radial-gradient(circle_at_80%_25%,_rgba(74,144,226,0.12),_transparent_26%)]" />
-        <div className="absolute left-0 top-32 h-80 w-80 rounded-full bg-accent/8 blur-[120px]" />
-        <div className="absolute right-0 top-16 h-96 w-96 rounded-full bg-amber-400/8 blur-[120px]" />
-      </div>
-
-      <div className="relative mx-auto max-w-7xl animate-fade-in space-y-4 px-4 py-5 sm:space-y-5 sm:px-6 sm:py-6">
-        <div className={`grid gap-4 ${isCompactLayout ? "" : "lg:grid-cols-[1.15fr_0.85fr]"}`}>
-          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="text-xs font-mono uppercase tracking-[0.32em] text-accent">RolePrep</p>
-                <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl sm:tracking-[0.08em] lg:text-6xl">{pageTitle}</h1>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">{pageCopy}</p>
-              </div>
-
-              <Link
-                to="/"
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-mono uppercase tracking-[0.18em] text-slate-300 transition hover:border-white/20 hover:text-slate-50"
-              >
-                <ArrowLeft size={16} />
-                Interview
-              </Link>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:grid-cols-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Live Sessions</p>
-                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{displaySessions.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Avg Score</p>
-                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{averageSessionScore}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Best</p>
-                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{bestSessionScore}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Questions</p>
-                <p className="mt-2 text-2xl font-display tracking-[0.06em] text-slate-50 sm:mt-3 sm:text-3xl sm:tracking-[0.08em]">{totalQuestions}</p>
-              </div>
-            </div>
+      <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className="absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.16),_transparent_38%),radial-gradient(circle_at_20%_20%,_rgba(0,255,136,0.1),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(74,144,226,0.12),_transparent_30%)]" /></div>
+      <div className="relative mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+        <section className="rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.95))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div><p className="text-sm uppercase tracking-[0.24em] text-accent">Retention dashboard</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl lg:text-6xl">Keep your interview momentum visible</h1><p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">Track score movement, spot weak areas, and jump straight back into the next practice round before momentum drops.</p></div>
+            <Link to="/interview" className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Start Interview<RotateCcw size={18} /></Link>
           </div>
-
-          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Status</p>
-                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Live Pulse</h2>
-              </div>
-              <Sparkles size={18} className="text-amber-300" />
-            </div>
-
-            <div className="mt-5 space-y-3">
-              <div className={`rounded-2xl border p-4 ${getPlanAccent(primarySession?.activeSessionPlan || primarySession?.selectedPlan || "free")}`}>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono uppercase tracking-[0.22em]">Plan</p>
-                  <Crown size={14} />
-                </div>
-                <p className="mt-3 text-2xl font-display tracking-[0.08em] text-slate-50">
-                  {formatPlanLabel(primarySession?.activeSessionPlan || primarySession?.selectedPlan || "free")}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Current Stage</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">
-                    {formatStageLabel(primarySession?.currentStage || "setup")}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Active</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">{activeSessions}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Credits</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">{primarySession?.sessionCredits ?? 0}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Last Active</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">
-                    {primarySession ? formatDate(primarySession.lastSessionActivityAt || primarySession.updatedAt) : "No session"}
-                  </p>
-                </div>
-              </div>
-
-              {primarySession && (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Stage Progress</p>
-                    <span className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
-                      {getSessionProgress(primarySession)}%
-                    </span>
-                  </div>
-                  <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/6">
-                    <div
-                      className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)]"
-                      style={{ width: `${getSessionProgress(primarySession)}%` }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {STAGE_ORDER.map((stage, index) => (
-                      <div
-                        key={stage}
-                        className={`rounded-2xl border px-3 py-3 text-xs font-mono uppercase tracking-[0.16em] ${getStageTone(
-                          index === getStageIndex(primarySession.currentStage, primarySession.questionCount),
-                          index < getStageIndex(primarySession.currentStage, primarySession.questionCount),
-                        )}`}
-                      >
-                        {formatStageLabel(stage)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Total interviews</p><Layers3 size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{totalInterviews}</p></div>
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Avg score</p><Gauge size={18} className="text-accent" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{average}</p></div>
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-5"><div className="flex items-center justify-between"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current streak</p><Flame size={18} className="text-amber-300" /></div><p className="mt-4 font-display text-5xl leading-none tracking-[0.05em] text-slate-50">{streak}</p></div>
           </div>
-        </div>
+        </section>
 
-        {warning && (
-          <div className="rounded-2xl border border-warn/20 bg-warn/10 px-4 py-3 text-sm text-warn">
-            {warning}
+        {warning && <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-base text-rose-200">{warning}</div>}
+
+        <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+            <div className="flex items-center gap-2"><TrendingUp size={18} className="text-accent" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Score graph</p></div>
+            <div className="mt-5"><ScoreTrendChart data={scoreSeries} height={mobileChartHeight} /></div>
           </div>
-        )}
-
-        <div className={`grid gap-4 sm:gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[1.05fr_0.95fr]"}`}>
-          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
-            <div className="mb-5 flex items-center gap-2">
-              <TrendingUp size={15} className="text-slate-300" />
-              <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Performance Trend</h2>
-            </div>
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={isCompactLayout ? 180 : 220}>
-                <LineChart data={chartData}>
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: "#77819a", fontSize: 11, fontFamily: "JetBrains Mono" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fill: "#77819a", fontSize: 11, fontFamily: "JetBrains Mono" }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={30}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#00ff88"
-                    strokeWidth={3}
-                    dot={{ fill: "#f4b44c", r: 4, strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: "#00ff88" }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className={`flex items-center justify-center text-center text-sm leading-7 text-slate-400 ${isCompactLayout ? "h-[180px]" : "h-[220px] sm:h-[260px]"}`}>
-                Complete a scored answer to light up your trend line.
-              </div>
-            )}
-          </div>
-
           <div className="space-y-5">
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
-              <div className="mb-5 flex items-center gap-2">
-                <Gauge size={15} className="text-slate-300" />
-                <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Stage Coverage</h2>
-              </div>
-              <div className="space-y-3">
-                {stageBreakdown.map((entry) => (
-                  <div key={entry.stage}>
-                    <div className="mb-2 flex items-center justify-between text-xs font-mono uppercase tracking-[0.16em] text-slate-400">
-                      <span>{formatStageLabel(entry.stage)}</span>
-                      <span>{entry.count}</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-white/6">
-                      <div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#4a90e2)]"
-                        style={{
-                          width: `${displaySessions.length ? Math.round((entry.count / displaySessions.length) * 100) : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+              <div className="flex items-center gap-2"><Sparkles size={18} className="text-amber-200" /><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Weak areas</p></div>
+              <div className="mt-5 flex flex-wrap gap-2">{areas.map((tag) => <span key={tag} className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-slate-100">{tag}</span>)}</div>
             </div>
-
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
-              <div className="mb-5 flex items-center gap-2">
-                <Layers3 size={15} className="text-slate-300" />
-                <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Question</h2>
-              </div>
-              <p className="text-base leading-8 text-slate-50 sm:text-lg">
-                {primarySession?.currentQuestion || "Start an interview round to see the live current question here."}
-              </p>
-            </div>
+            <StageProgress session={currentSession} />
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Session Timeline</p>
-              <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Progress by Session</h2>
-            </div>
+        <section className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Session history</p><h2 className="mt-2 font-display text-3xl leading-none tracking-[0.05em] text-slate-50">Retry from what matters</h2></div>
+            {currentSession && <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200">Current stage: {stageLabel(currentSession.currentStage)}</div>}
           </div>
-
-          {displaySessions.length === 0 && (
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] px-6 py-14 text-center text-sm leading-7 text-slate-400 shadow-[0_24px_70px_rgba(0,0,0,0.32)]">
-              No practice history yet. Start your first session and your progress will show up here.
-            </div>
-          )}
-
-          {displaySessions.map((session) => {
-            const progress = getSessionProgress(session);
-            const stageIndex = getStageIndex(session.currentStage, session.questionCount);
-            const score = averageScore(session.scores);
-
-            return (
-              <div
-                key={session.sessionId}
-                className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6"
-              >
-                <div className="grid gap-5 lg:grid-cols-[0.2fr_0.8fr]">
-                  <div className="flex items-start justify-center lg:justify-start">
-                    <ScoreCard score={score} size={isCompactLayout ? "sm" : "md"} />
+          {!recentSessions.length && <div className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] px-6 py-14 text-center text-base leading-8 text-slate-300 shadow-[0_24px_60px_rgba(0,0,0,0.28)]">Run your first interview and the dashboard will start tracking progress immediately.</div>}
+          {recentSessions.map((session) => (
+            <div key={session.sessionId} className="rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition-all duration-200 ease-in-out hover:-translate-y-1 hover:border-white/14 sm:p-6">
+              <div className="grid gap-5 lg:grid-cols-[0.2fr_0.8fr]">
+                <div className="flex justify-center lg:justify-start"><ScoreCard score={avgScore(session.scores)} size="sm" /></div>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div><p className="text-2xl text-slate-50">{session.role || "Interview session"}</p><div className="mt-2 inline-flex items-center gap-2 text-sm text-slate-400"><Calendar size={14} />{dateLabel(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)}</div></div>
+                    <Link to="/interview" className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-accent/25 hover:bg-white/[0.08]">Retry<RotateCcw size={16} /></Link>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-xl text-slate-50">{session.role || "Interview Session"}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-mono uppercase tracking-[0.16em] text-slate-400">
-                          <span className="inline-flex items-center gap-1">
-                            <Calendar size={12} />
-                            {formatDate(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Clock3 size={12} />
-                            {formatDateTime(session.lastSessionActivityAt || session.updatedAt || session.sessionStartedAt)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <span className={`rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.16em] ${getPlanAccent(session.activeSessionPlan || session.selectedPlan)}`}>
-                          {formatPlanLabel(session.activeSessionPlan || session.selectedPlan)}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-mono uppercase tracking-[0.16em] text-slate-300">
-                          {formatStageLabel(session.currentStage || "setup")}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Progress</p>
-                        <span className="text-xs font-mono uppercase tracking-[0.18em] text-accent">{progress}%</span>
-                      </div>
-                      <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/6">
-                        <div
-                          className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)]"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                      <div className={`grid gap-2 ${isCompactLayout ? "grid-cols-2" : "sm:grid-cols-3 lg:grid-cols-6"}`}>
-                        {STAGE_ORDER.map((stage, index) => (
-                          <div
-                            key={`${session.sessionId}-${stage}`}
-                            className={`rounded-2xl border px-3 py-2 text-center text-[11px] font-mono uppercase tracking-[0.14em] ${getStageTone(
-                              index === stageIndex,
-                              index < stageIndex,
-                            )}`}
-                          >
-                            {formatStageLabel(stage)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Questions</p>
-                        <p className="mt-2 text-2xl font-display tracking-[0.08em] text-slate-50">{session.questionCount}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Best Score</p>
-                        <p className="mt-2 text-2xl font-display tracking-[0.08em] text-slate-50">{getBestScore(session.scores)}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Credits</p>
-                        <p className="mt-2 text-2xl font-display tracking-[0.08em] text-slate-50">{session.sessionCredits}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Current Question</p>
-                      <p className="mt-3 text-sm leading-7 text-slate-200">
-                        {session.currentQuestion || "Your next interview question will appear here as you move through practice."}
-                      </p>
-                    </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Role</p><p className="mt-3 text-lg text-slate-100">{session.role || "Interview session"}</p></div>
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Score</p><p className="mt-3 text-lg text-slate-100">{avgScore(session.scores)}</p></div>
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Date</p><p className="mt-3 text-lg text-slate-100">{dateLabel(session.updatedAt || session.lastSessionActivityAt || session.sessionStartedAt)}</p></div>
                   </div>
+                  <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current question</p><p className="mt-3 text-base leading-8 text-slate-100">{session.currentQuestion || "Your next question will show up here after the next practice run."}</p></div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          ))}
+        </section>
 
         <SupportFooter />
       </div>

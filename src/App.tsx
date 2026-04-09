@@ -1,7 +1,9 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import AppNavbar from "./components/AppNavbar";
 import InstallPrompt from "./components/InstallPrompt";
 
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 const InterviewPage = lazy(() => import("./pages/InterviewPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 
@@ -18,14 +20,26 @@ function RouteLoader() {
   );
 }
 
+function AppShell() {
+  return (
+    <div className="min-h-dvh bg-bg-base">
+      <AppNavbar />
+      <Outlet />
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <InstallPrompt />
       <Suspense fallback={<RouteLoader />}>
         <Routes>
-          <Route path="/" element={<InterviewPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/interview" element={<InterviewPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+          </Route>
         </Routes>
       </Suspense>
     </BrowserRouter>

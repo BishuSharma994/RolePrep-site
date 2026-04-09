@@ -1,949 +1,260 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  BarChart3,
-  Briefcase,
-  Check,
-  CreditCard,
-  Crown,
-  FileText,
-  Layers3,
-  Loader2,
-  Paperclip,
-  Send,
-  Sparkles,
-  Target,
-  UploadCloud,
-  UserRound,
-  X,
-} from "lucide-react";
-import AudioRecorder from "../components/AudioRecorder";
+import { Crown, FileText, Loader2, LogOut, Mic, PauseCircle, Paperclip, RefreshCw, Sparkles, UploadCloud } from "lucide-react";
+import PaymentGate from "../components/PaymentGate";
 import SupportFooter from "../components/SupportFooter";
-import UploadBox from "../components/UploadBox";
-import TranscriptPanel from "../components/TranscriptPanel";
-import AnalysisPanel from "../components/AnalysisPanel";
+import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
-import { type Session, useStore } from "../store";
-import {
-  analyzeAudio,
-  createPaymentLink,
-  createSession,
-  getOrCreateLocalUserId,
-  getSessions,
-  normalizeAnalysisResponse,
-  type PlanType,
-} from "../services/api";
+import { analyzeAudio, createPaymentLink, createSession, getOrCreateLocalUserId, getSessions, normalizeAnalysisResponse, type PlanType } from "../services/api";
+import { useStore } from "../store";
 
-const SAMPLE_QUESTIONS = [
-  "Tell me about a time you led a project under pressure.",
-  "What is your greatest professional weakness?",
-  "Describe a conflict with a coworker and how you resolved it.",
-  "Why do you want this role?",
-  "Walk me through a difficult decision you made.",
+type UiState = "idle" | "listening" | "processing" | "feedback" | "next_question";
+const MAX_SECONDS = 90;
+const QUESTIONS = ["Tell me about a project where you had to make a tough tradeoff under pressure.", "Describe a time you disagreed with a stakeholder and how you handled it.", "Walk me through the most technical challenge you solved recently.", "Why are you a strong fit for this role right now?"];
+const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: string }> = [
+  { planType: "session_10", label: "Buy Rs 10", price: "1 session", blurb: "Unlock one timed simulation." },
+  { planType: "session_29", label: "Buy Rs 29", price: "5 sessions", blurb: "Run repeated interview drills." },
+  { planType: "premium", label: "Go Premium Rs 99", price: "Unlimited", blurb: "Unlimited access and always-on practice." },
 ];
 
-const STAGE_ORDER = ["setup", "resume_session", "warmup", "core", "followup", "complete"];
-const PLAN_OPTIONS: Array<{
-  planType: PlanType;
-  label: string;
-  price: string;
-  description: string;
-}> = [
-  {
-    planType: "session_10",
-    label: "Single Session",
-    price: "Rs 10",
-    description: "Unlock one guided interview session and test the credit flow.",
-  },
-  {
-    planType: "session_29",
-    label: "Session Pack",
-    price: "Rs 29",
-    description: "Best for testing session credits and repeated practice rounds.",
-  },
-  {
-    planType: "premium",
-    label: "Premium",
-    price: "Rs 99",
-    description: "Unlock the premium plan path and subscription-style access.",
-  },
-];
-
-const VALUE_POINTS = [
-  {
-    label: "Sharper answers",
-    description: "Turn rough thoughts into clear, interview-ready responses with instant feedback.",
-  },
-  {
-    label: "Visible progress",
-    description: "See your stage, questions answered, and access status update as you practice.",
-  },
-  {
-    label: "Personalized prep",
-    description: "Bring your JD, resume, and role context together so every round feels relevant.",
-  },
-];
-
-function getInitialValue(key: string) {
-  return window.localStorage.getItem(key) ?? "";
-}
-
-function getErrorMessage(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "response" in error &&
-    error.response &&
-    typeof error.response === "object" &&
-    "data" in error.response
-  ) {
+const planLabel = (plan: string) => (!plan || plan === "free" ? "Free" : plan === "session_10" ? "1 session" : plan === "session_29" ? "5 session pack" : plan === "premium" ? "Premium" : plan.replace(/_/g, " "));
+const timerLabel = (seconds: number) => `${Math.floor(Math.max(0, seconds) / 60)}:${String(Math.max(0, seconds) % 60).padStart(2, "0")}`;
+const timeLeft = (expiry: number) => {
+  if (!expiry) return "No active premium pass";
+  const target = expiry > 10_000_000_000 ? expiry : expiry * 1000;
+  const diff = target - Date.now();
+  if (diff <= 0) return "Premium expired";
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff / 3600000) % 24);
+  return days > 0 ? `${days}d ${hours}h left` : `${hours}h ${Math.floor((diff / 60000) % 60)}m left`;
+};
+function errorText(error: unknown) {
+  if (error && typeof error === "object" && "response" in error && error.response && typeof error.response === "object" && "data" in error.response) {
     const data = error.response.data as { detail?: string | { reason?: string } };
-    if (typeof data?.detail === "string") {
-      return data.detail;
-    }
-    if (data?.detail && typeof data.detail === "object" && "reason" in data.detail) {
-      return String(data.detail.reason ?? "Request failed.");
-    }
+    if (typeof data?.detail === "string") return data.detail;
+    if (data?.detail && typeof data.detail === "object" && "reason" in data.detail) return String(data.detail.reason ?? "Request failed.");
   }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
-
-function formatStageLabel(stage: string) {
-  if (!stage) {
-    return "Setup";
-  }
-
-  return stage
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (value) => value.toUpperCase());
-}
-
-function formatPlanLabel(plan: string) {
-  if (!plan) {
-    return "Free";
-  }
-
-  if (plan === "session_10") {
-    return "Session 10";
-  }
-
-  if (plan === "session_29") {
-    return "Session 29";
-  }
-
-  return plan.replace(/_/g, " ").replace(/\b\w/g, (value) => value.toUpperCase());
-}
-
-function formatExpiry(value: number) {
-  if (!value) {
-    return "Not active";
-  }
-
-  const timestamp = value > 10_000_000_000 ? value : value * 1000;
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function getStageIndex(stage: string, questionCount: number) {
-  const exactMatch = STAGE_ORDER.findIndex((entry) => entry === stage);
-  if (exactMatch >= 0) {
-    return exactMatch;
-  }
-
-  if (questionCount >= 6) return 5;
-  if (questionCount >= 4) return 4;
-  if (questionCount >= 2) return 3;
-  if (questionCount >= 1) return 2;
-  return 0;
-}
-
-function getSessionProgress(session: Session | null, hasAnalysis: boolean) {
-  if (!session) {
-    return 8;
-  }
-
-  const stageIndex = getStageIndex(session.currentStage, session.questionCount);
-  const stageProgress = ((stageIndex + 1) / STAGE_ORDER.length) * 100;
-  const questionProgress = Math.min(100, session.questionCount * 18);
-  const analysisProgress = hasAnalysis ? 72 : 0;
-
-  return Math.max(12, Math.min(100, Math.round(Math.max(stageProgress, questionProgress, analysisProgress))));
-}
-
-function getPlanAccent(plan: string) {
-  const normalized = plan.toLowerCase();
-
-  if (normalized.includes("premium")) {
-    return "border-amber-400/30 bg-amber-400/10 text-amber-200";
-  }
-
-  if (normalized.includes("session")) {
-    return "border-sky-400/30 bg-sky-400/10 text-sky-200";
-  }
-
-  return "border-white/10 bg-white/5 text-text-secondary";
-}
-
-function getStageTone(isActive: boolean, isComplete: boolean) {
-  if (isActive) {
-    return "border-accent/40 bg-accent/12 text-accent shadow-[0_0_0_1px_rgba(0,255,136,0.1)]";
-  }
-
-  if (isComplete) {
-    return "border-white/12 bg-white/6 text-text-primary";
-  }
-
-  return "border-white/8 bg-white/[0.03] text-text-dim";
+  return error instanceof Error && error.message ? error.message : "Something went wrong. Please try again.";
 }
 
 export default function InterviewPage() {
-  const {
-    transcript,
-    analysis,
-    currentSession,
-    isAnalyzing,
-    setTranscript,
-    setAnalysis,
-    setCurrentSession,
-    setSessions,
-    addSession,
-    setIsAnalyzing,
-  } = useStore();
+  const transcript = useStore((state) => state.transcript);
+  const analysis = useStore((state) => state.analysis);
+  const currentSession = useStore((state) => state.currentSession);
+  const sessions = useStore((state) => state.sessions);
+  const setTranscript = useStore((state) => state.setTranscript);
+  const setAnalysis = useStore((state) => state.setAnalysis);
+  const setCurrentSession = useStore((state) => state.setCurrentSession);
+  const setSessions = useStore((state) => state.setSessions);
   const device = useDeviceProfile();
-
+  const { state: recorderState, audioBlob, duration, errorMsg, start, stop, reset } = useAudioRecorder();
   const [userId] = useState(() => getOrCreateLocalUserId());
-  const [role, setRole] = useState(() => getInitialValue("roleprep_role"));
-  const [jdText, setJdText] = useState(() => getInitialValue("roleprep_jd_text"));
-  const [resumeNotes, setResumeNotes] = useState(() => getInitialValue("roleprep_resume_notes"));
+  const [uiState, setUiState] = useState<UiState>("idle");
+  const [role, setRole] = useState(() => window.localStorage.getItem("roleprep_role") ?? "");
+  const [jdText, setJdText] = useState(() => window.localStorage.getItem("roleprep_jd_text") ?? "");
+  const [resumeNotes, setResumeNotes] = useState(() => window.localStorage.getItem("roleprep_resume_notes") ?? "");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeExcerpt, setResumeExcerpt] = useState("");
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [question, setQuestion] = useState(SAMPLE_QUESTIONS[0]);
-  const [inputMode, setInputMode] = useState<"record" | "upload">("record");
+  const [question, setQuestion] = useState(QUESTIONS[0]);
   const [error, setError] = useState("");
-  const [paymentError, setPaymentError] = useState("");
-  const [paymentNotice, setPaymentNotice] = useState("");
-  const [isRefreshingSession, setIsRefreshingSession] = useState(false);
+  const [notice, setNotice] = useState("");
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [sessionContextKey, setSessionContextKey] = useState("");
-
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
-  const isCompactLayout = device.isMobile || device.isStandalone;
-  const heroTitle = isCompactLayout ? "Interview Copilot" : "Interview Copilot For Serious Practice";
-  const heroCopy = isCompactLayout
-    ? "Practice with cleaner feedback, visible progress, and premium guidance that feels built around you."
-    : "Practice with the feel of a premium interview coach: sharper answers, visible progress, and a workspace that keeps every round aligned to your goal.";
-  const sessionIdentityCopy = isCompactLayout
-    ? "Your private workspace keeps your plan, progress, and current round ready to continue."
-    : "Your private workspace keeps your plan, progress, and current round in sync so you can pick up exactly where you left off.";
-  const billingCopy = isCompactLayout
-    ? "Unlock more practice instantly and sync your access as soon as payment is confirmed."
-    : "Choose the access level you want, complete checkout, and your practice credits will sync as soon as payment is confirmed.";
-  const sessionProgress = useMemo(
-    () => getSessionProgress(currentSession, Boolean(analysis)),
-    [analysis, currentSession],
-  );
-  const currentStageIndex = getStageIndex(currentSession?.currentStage || "", currentSession?.questionCount ?? 0);
-  const fieldClassName =
-    "w-full rounded-2xl border border-white/10 bg-[#0f1420] px-4 py-3 text-sm font-body text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-accent/50 focus:bg-[#121826] focus:ring-2 focus:ring-accent/10";
+  const isPremium = currentPlan === "premium";
+  const credits = currentSession?.sessionCredits ?? 0;
+  const isLocked = currentSession !== null && !isPremium && credits <= 0;
+  const countdown = Math.max(0, MAX_SECONDS - duration);
+  const isMobileLayout = device.isMobile || device.isStandalone;
+  const statusText = useMemo(() => (uiState === "listening" ? "Listening..." : uiState === "processing" ? "Processing..." : uiState === "feedback" ? "Feedback ready" : uiState === "next_question" ? "Loading next question..." : "Ready when you are"), [uiState]);
 
-  useEffect(() => {
-    const index = Math.floor(Math.random() * SAMPLE_QUESTIONS.length);
-    setQuestion(SAMPLE_QUESTIONS[index]);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("roleprep_role", role);
-  }, [role]);
-
-  useEffect(() => {
-    window.localStorage.setItem("roleprep_jd_text", jdText);
-  }, [jdText]);
-
-  useEffect(() => {
-    window.localStorage.setItem("roleprep_resume_notes", resumeNotes);
-  }, [resumeNotes]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const syncExistingSession = async () => {
-      try {
-        const sessions = await getSessions(userId);
-        if (!isMounted) {
-          return;
-        }
-
-        setSessions(sessions);
-        if (sessions[0]) {
-          setCurrentSession(sessions[0]);
-          setSessionContextKey(`${sessions[0].role.trim()}::${sessions[0].jdText.trim()}`);
-        }
-      } catch {
-        // The page can still operate without preloading an existing session.
-      }
-    };
-
-    syncExistingSession();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [setCurrentSession, setSessions, userId]);
-
-  useEffect(() => {
-    if (currentSession?.currentQuestion) {
-      setQuestion(currentSession.currentQuestion);
+  const refreshSessions = async () => {
+    const nextSessions = await getSessions(userId);
+    setSessions(nextSessions);
+    if (nextSessions[0]) {
+      setCurrentSession(nextSessions[0]);
+      setSessionContextKey(`${nextSessions[0].role.trim()}::${nextSessions[0].jdText.trim()}`);
+      if (nextSessions[0].currentQuestion) setQuestion(nextSessions[0].currentQuestion);
     }
-  }, [currentSession?.currentQuestion]);
+    return nextSessions[0] ?? null;
+  };
+
+  useEffect(() => window.localStorage.setItem("roleprep_role", role), [role]);
+  useEffect(() => window.localStorage.setItem("roleprep_jd_text", jdText), [jdText]);
+  useEffect(() => window.localStorage.setItem("roleprep_resume_notes", resumeNotes), [resumeNotes]);
+  useEffect(() => { void refreshSessions(); }, []);
+  useEffect(() => { if (currentSession?.currentQuestion) setQuestion(currentSession.currentQuestion); }, [currentSession?.currentQuestion]);
+  useEffect(() => {
+    if (recorderState === "recording") { setUiState("listening"); setError(""); setNotice(""); }
+    if (recorderState === "error" && errorMsg) { setError(errorMsg); setUiState("idle"); }
+  }, [errorMsg, recorderState]);
+  useEffect(() => { if (recorderState === "recording" && countdown === 0) stop(); }, [countdown, recorderState, stop]);
+  useEffect(() => { if (recorderState === "stopped" && audioBlob) void submitResponse(audioBlob); }, [audioBlob, recorderState]);
 
   useEffect(() => {
-    const handleReturnToApp = async () => {
-      if (document.visibilityState === "hidden") {
-        return;
-      }
-
+    const onReturn = async () => {
+      if (document.visibilityState === "hidden") return;
       try {
-        const previousPlan = currentPlan;
-        const nextSession = await refreshSessions();
-        const nextPlan = nextSession?.activeSessionPlan || nextSession?.selectedPlan || "free";
-
-        if (previousPlan !== nextPlan && nextPlan !== "free") {
-          setPaymentNotice(`Payment confirmed. ${formatPlanLabel(nextPlan)} is now active.`);
-          setPaymentError("");
-        }
-      } catch {
-        // Silent background sync when the user returns to the app.
-      }
+        const previous = currentPlan;
+        const next = await refreshSessions();
+        const nextPlan = next?.activeSessionPlan || next?.selectedPlan || "free";
+        if (previous !== nextPlan && nextPlan !== "free") setNotice(`Payment confirmed. ${planLabel(nextPlan)} is active now.`);
+      } catch { /* silent */ }
     };
-
-    window.addEventListener("focus", handleReturnToApp);
-    document.addEventListener("visibilitychange", handleReturnToApp);
-
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
     return () => {
-      window.removeEventListener("focus", handleReturnToApp);
-      document.removeEventListener("visibilitychange", handleReturnToApp);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
     };
   }, [currentPlan]);
 
-  const refreshSessions = async () => {
-    const sessions = await getSessions(userId);
-    setSessions(sessions);
-    if (sessions[0]) {
-      setCurrentSession(sessions[0]);
-      setSessionContextKey(`${sessions[0].role.trim()}::${sessions[0].jdText.trim()}`);
-    }
-
-    return sessions[0] ?? null;
-  };
-
-  const handleRefreshSession = async () => {
-    setPaymentError("");
-    setPaymentNotice("");
-    setIsRefreshingSession(true);
-
-    try {
-      const previousPlan = currentPlan;
-      const nextSession = await refreshSessions();
-      const nextPlan = nextSession?.activeSessionPlan || nextSession?.selectedPlan || "free";
-
-      if (previousPlan !== nextPlan && nextPlan !== "free") {
-        setPaymentNotice(`Plan updated to ${formatPlanLabel(nextPlan)}. Credits and access are now synced.`);
-      } else {
-        setPaymentNotice("Your plan and session access are now refreshed.");
-      }
-    } catch (refreshError) {
-      setPaymentError(getErrorMessage(refreshError));
-    } finally {
-      setIsRefreshingSession(false);
-    }
-  };
-
-  const ensureSession = async () => {
-    const currentContextKey = `${role.trim()}::${jdText.trim()}`;
-    if (
-      currentSession &&
-      currentSession.userId === userId &&
-      currentContextKey === sessionContextKey
-    ) {
-      return currentSession;
-    }
-
+  async function ensureSession() {
+    const contextKey = `${role.trim()}::${jdText.trim()}`;
+    if (currentSession && currentSession.userId === userId && contextKey === sessionContextKey) return currentSession;
     const session = await createSession({
-      userId,
-      role: role.trim(),
-      jdText: jdText.trim(),
-      parserData: {
-        candidate_profile: {
-          resume_file_name: resumeFile?.name ?? null,
-          resume_notes: resumeNotes.trim() || null,
-          resume_text_excerpt: resumeExcerpt || null,
-        },
-      },
-      resumePath: resumeFile?.name,
+      userId, role: role.trim(), jdText: jdText.trim(), resumePath: resumeFile?.name,
+      parserData: { candidate_profile: { resume_file_name: resumeFile?.name ?? null, resume_notes: resumeNotes.trim() || null, resume_text_excerpt: resumeExcerpt || null } },
     });
-
-    addSession(session);
     setCurrentSession(session);
-    setSessionContextKey(currentContextKey);
+    setSessions([session, ...sessions.filter((entry) => entry.sessionId !== session.sessionId)]);
+    setSessionContextKey(contextKey);
     return session;
-  };
+  }
 
-  const handleRecordReady = (blob: Blob) => {
-    setAudioBlob(blob);
-    setError("");
-  };
-
-  const handleRecorderReset = () => {
-    setAudioBlob(null);
-  };
-
-  const handleFileReady = (blob: Blob | null) => {
-    setAudioBlob(blob);
-    setError("");
-  };
-
-  const handleResumeFileChange = async (nextFile: File | null) => {
-    setResumeFile(nextFile);
-
-    if (!nextFile) {
-      setResumeExcerpt("");
-      return;
+  async function submitResponse(blob: Blob | File) {
+    if (!role.trim()) return setError("Set your target role before starting the interview.");
+    if (!jdText.trim()) return setError("Paste the job description so the simulator can score against the right brief.");
+    setUiState("processing"); setError(""); setNotice(""); setAnalysis(null); setTranscript("");
+    try {
+      await ensureSession();
+      const file = blob instanceof File ? blob : new File([blob], "interview-response.webm", { type: blob.type || "audio/webm" });
+      const response = await analyzeAudio(file, { role: role.trim(), jdText: jdText.trim(), currentQuestion: question });
+      const normalized = normalizeAnalysisResponse(response);
+      setTranscript(normalized.transcript); setAnalysis(normalized.analysis);
+      setQuestion(normalized.analysis.followUp.question || QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
+      await refreshSessions();
+      setUiState("feedback");
+    } catch (submissionError) {
+      setError(errorText(submissionError)); setUiState("idle");
+    } finally {
+      reset();
     }
+  }
 
-    if (nextFile.type.startsWith("text/")) {
-      const text = await nextFile.text();
-      setResumeExcerpt(text.slice(0, 4000));
-      return;
-    }
+  async function handleMicButton() {
+    if (isLocked || uiState === "processing") return;
+    if (recorderState === "recording") return stop();
+    if (!role.trim()) return setError("Set your target role before starting the interview.");
+    if (!jdText.trim()) return setError("Paste the job description before starting the interview.");
+    await start();
+  }
 
-    setResumeExcerpt("");
-  };
-
-  const handleCheckout = async (planType: PlanType) => {
-    setPaymentError("");
-    setActiveCheckoutPlan(planType);
-
+  async function handleCheckout(planType: PlanType) {
+    setError(""); setNotice(""); setActiveCheckoutPlan(planType);
     try {
       const { paymentLink } = await createPaymentLink(userId, planType);
-
-      if (!paymentLink) {
-        throw new Error("Payment could not be started right now. Please try again.");
-      }
-
+      if (!paymentLink) throw new Error("Unable to open checkout right now.");
       window.location.href = paymentLink;
     } catch (checkoutError) {
-      setPaymentError(getErrorMessage(checkoutError));
+      setError(errorText(checkoutError));
     } finally {
       setActiveCheckoutPlan(null);
     }
-  };
+  }
 
-  const handleSubmit = async () => {
-    if (!role.trim()) {
-      setError("Enter the target role before starting analysis.");
-      return;
-    }
-
-    if (!jdText.trim()) {
-      setError("Paste the job description before starting analysis.");
-      return;
-    }
-
-    if (!audioBlob) {
-      setError("Please record or upload an audio response first.");
-      return;
-    }
-
-    setError("");
-    setIsAnalyzing(true);
-    setTranscript("");
-    setAnalysis(null);
-
+  async function handleRefreshAccess() {
+    setIsRefreshing(true); setError("");
     try {
-      await ensureSession();
-
-      const audioFile =
-        audioBlob instanceof File
-          ? audioBlob
-          : new File([audioBlob], "interview-response.webm", {
-              type: audioBlob.type || "audio/webm",
-            });
-
-      const response = await analyzeAudio(audioFile, {
-        role: role.trim(),
-        jdText: jdText.trim(),
-        currentQuestion: question,
-      });
-
-      const normalized = normalizeAnalysisResponse(response);
-      setTranscript(normalized.transcript);
-      setAnalysis(normalized.analysis);
-      if (normalized.analysis.followUp.question) {
-        setQuestion(normalized.analysis.followUp.question);
-      }
-
-      await refreshSessions();
-    } catch (submissionError) {
-      setError(getErrorMessage(submissionError));
+      const before = currentPlan; const next = await refreshSessions(); const nextPlan = next?.activeSessionPlan || next?.selectedPlan || "free";
+      setNotice(before !== nextPlan ? `Access updated. You are now on ${planLabel(nextPlan)}.` : "Session status refreshed.");
+    } catch (refreshError) {
+      setError(errorText(refreshError));
     } finally {
-      setIsAnalyzing(false);
+      setIsRefreshing(false);
     }
-  };
+  }
+
+  async function handleResumeUpload(file: File | null) {
+    setResumeFile(file);
+    if (!file) return setResumeExcerpt("");
+    if (file.type.startsWith("text/")) return setResumeExcerpt((await file.text()).slice(0, 4000));
+    setResumeExcerpt(file.name);
+  }
 
   return (
-    <div className="min-h-dvh bg-[#070b14] noise-overlay">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.18),_transparent_38%),radial-gradient(circle_at_20%_30%,_rgba(0,255,136,0.18),_transparent_30%),radial-gradient(circle_at_80%_25%,_rgba(74,144,226,0.12),_transparent_28%)]" />
-        <div className="absolute -left-32 top-24 h-80 w-80 rounded-full bg-accent/10 blur-[120px]" />
-        <div className="absolute right-0 top-20 h-96 w-96 rounded-full bg-amber-400/10 blur-[120px]" />
-      </div>
-
-      <div className="relative mx-auto max-w-7xl animate-fade-in px-4 py-5 sm:px-6 sm:py-6">
-        <div className="mb-5 grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="self-start overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,24,38,0.95),rgba(8,11,20,0.92))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:rounded-[28px] sm:p-6">
-            <div className="mb-7 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="font-display text-xl tracking-[0.22em] text-accent sm:text-2xl">RolePrep</p>
-                <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl sm:tracking-[0.08em] lg:text-6xl">
-                  {heroTitle}
-                </h1>
-              </div>
-
-              <div className={`w-fit rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.2em] sm:text-xs sm:tracking-[0.25em] ${getPlanAccent(currentPlan)}`}>
-                {formatPlanLabel(currentPlan)}
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr] sm:gap-5">
-              <div>
-                <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">{heroCopy}</p>
-
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Current Stage</p>
-                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">
-                      {formatStageLabel(currentSession?.currentStage || "setup")}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Progress</p>
-                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">{sessionProgress}%</p>
-                  </div>
-                  <div className="col-span-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:col-span-1">
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Questions</p>
-                    <p className="mt-2 text-lg font-display tracking-[0.06em] text-slate-100 sm:mt-3 sm:text-xl sm:tracking-[0.08em]">
-                      {currentSession?.questionCount ?? 0}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-3">
-                  {VALUE_POINTS.map((point) => (
-                    <div key={point.label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent">{point.label}</p>
-                      <p className="mt-3 text-sm leading-6 text-slate-300">{point.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-[22px] border border-white/10 bg-black/20 p-4 backdrop-blur-xl sm:rounded-[24px] sm:p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Your Workspace</p>
-                    <p className="mt-2 text-xs leading-6 text-slate-300 sm:text-sm">{sessionIdentityCopy}</p>
-                  </div>
-                  <Sparkles size={18} className="text-amber-300" />
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 font-mono text-xs tracking-[0.18em] text-slate-100 sm:text-sm">
-                  {userId.slice(0, 8)}...{userId.slice(-4)}
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3">
-                  <Link
-                    to="/dashboard"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-xs font-mono uppercase tracking-[0.2em] text-[#07110c] transition hover:bg-accent-dim sm:text-sm"
-                  >
-                    <BarChart3 size={16} />
-                    View Progress
-                  </Link>
-                  <p className="text-xs leading-6 text-slate-400">
-                    Track your progress, credits, and current round in one clean workspace.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="self-start rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,21,34,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.32)] sm:rounded-[28px] sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-mono uppercase tracking-[0.25em] text-slate-400">Plans & Access</p>
-                <h2 className="mt-2 font-display text-2xl tracking-[0.06em] text-slate-50 sm:text-3xl sm:tracking-[0.08em]">Unlock More Practice</h2>
-              </div>
-              <Crown size={20} className="text-amber-300" />
-            </div>
-
-            <div className="mt-5 space-y-3">
-              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/8 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Your Plan</p>
-                  <CreditCard size={15} className="text-amber-200" />
-                </div>
-                <p className="mt-3 text-xl font-display tracking-[0.06em] text-slate-50 sm:text-2xl sm:tracking-[0.08em]">{formatPlanLabel(currentPlan)}</p>
-                <p className="mt-2 text-sm leading-6 text-slate-300">
-                  Practice credits available: <span className="text-slate-100">{currentSession?.sessionCredits ?? 0}</span>
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Choose Your Access</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">{billingCopy}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleRefreshSession()}
-                    disabled={isRefreshingSession}
-                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-mono uppercase tracking-[0.18em] text-slate-200 transition hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isRefreshingSession ? "Refreshing" : "Refresh"}
-                  </button>
-                </div>
-
-                <div className="grid gap-3">
-                  {PLAN_OPTIONS.map((plan) => (
-                    <div key={plan.planType} className="rounded-2xl border border-white/10 bg-[#0d1320] p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-slate-100">{plan.label}</p>
-                          <p className="mt-1 text-xs font-mono uppercase tracking-[0.16em] text-accent">{plan.price}</p>
-                        </div>
-                        {currentPlan === plan.planType && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-1 text-[10px] font-mono uppercase tracking-[0.16em] text-accent">
-                            <Check size={12} />
-                            Current
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-3 text-xs leading-6 text-slate-400">{plan.description}</p>
-                      <button
-                        type="button"
-                        onClick={() => void handleCheckout(plan.planType)}
-                        disabled={activeCheckoutPlan !== null}
-                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-4 py-3 text-xs font-mono uppercase tracking-[0.18em] text-[#07110c] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {activeCheckoutPlan === plan.planType ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" />
-                            Opening
-                          </>
-                        ) : (
-                          <>
-                            Pay & Activate
-                            <ArrowRight size={14} />
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {paymentError && (
-                  <p className="mt-3 rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-rose-200">
-                    {paymentError}
-                  </p>
-                )}
-
-                {paymentNotice && (
-                  <p className="mt-3 rounded-2xl border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-emerald-200">
-                    {paymentNotice}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Expiry</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">
-                    {formatExpiry(currentSession?.subscriptionExpiry ?? 0)}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Session State</p>
-                  <p className="mt-3 text-sm leading-6 text-slate-100">
-                    {currentSession?.activeSession ? "Active" : "Ready to start"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="text-xs font-mono uppercase tracking-[0.22em] text-slate-400">Stage Ladder</p>
-                  <span className="text-xs font-mono uppercase tracking-[0.18em] text-accent">{sessionProgress}% complete</span>
-                </div>
-                <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/6">
-                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)]" style={{ width: `${sessionProgress}%` }} />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {STAGE_ORDER.map((stage, index) => (
-                    <div
-                      key={stage}
-                      className={`rounded-2xl border px-3 py-3 text-xs font-mono uppercase tracking-[0.16em] ${getStageTone(
-                        index === currentStageIndex,
-                        index < currentStageIndex,
-                      )}`}
-                    >
-                      {formatStageLabel(stage)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+    <div className="min-h-dvh bg-[#070b14] noise-overlay pb-32">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden"><div className="absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.16),_transparent_38%),radial-gradient(circle_at_20%_20%,_rgba(0,255,136,0.12),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(74,144,226,0.12),_transparent_30%)]" /></div>
+      <div className="relative mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
+        <div className="sticky top-[76px] z-30 mb-5 grid items-center gap-3 rounded-[26px] border border-white/10 bg-[rgba(10,14,24,0.85)] px-4 py-3 backdrop-blur-xl md:grid-cols-[1fr_auto_1fr]">
+          <div className="hidden items-center gap-3 md:flex"><span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200">{isPremium ? "Unlimited access active" : `${credits} sessions left`}</span><span className="text-sm text-slate-400">{planLabel(currentPlan)}</span></div>
+          <div className="mx-auto rounded-full border border-accent/20 bg-accent/10 px-5 py-2 text-center text-base font-medium text-accent">{uiState === "listening" ? timerLabel(countdown) : timerLabel(MAX_SECONDS)}</div>
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => void handleRefreshAccess()} disabled={isRefreshing} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60">{isRefreshing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}Refresh</button>
+            <Link to="/" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"><LogOut size={16} />Exit</Link>
           </div>
         </div>
 
-        <div className={`mb-5 grid gap-4 sm:gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[1.1fr_0.9fr]"}`}>
-          <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
-            <div className="mb-5 flex items-center gap-2">
-              <Briefcase size={15} className="text-slate-300" />
-              <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Session Setup</h2>
-            </div>
-
-            <div className="grid gap-4">
-              <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Target Role</span>
-                <div className="relative">
-                  <UserRound size={14} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    value={role}
-                    onChange={(event) => setRole(event.target.value)}
-                    placeholder="Senior Product Designer, Growth PM, Staff Engineer..."
-                    className={`${fieldClassName} pl-11`}
-                  />
-                </div>
-              </label>
-
-              <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Job Description</span>
-                <div className="relative">
-                  <FileText size={14} className="pointer-events-none absolute left-4 top-4 text-slate-500" />
-                  <textarea
-                    value={jdText}
-                    onChange={(event) => setJdText(event.target.value)}
-                    placeholder="Paste the JD so RolePrep can anchor the interview and scoring to the actual role."
-                    rows={7}
-                    className={`${fieldClassName} min-h-[180px] pl-11`}
-                  />
-                </div>
-              </label>
-
-              <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 sm:rounded-[24px]">
-                <div className="mb-3 flex items-center gap-2">
-                  <Paperclip size={14} className="text-slate-300" />
-                  <h3 className="text-xs font-mono uppercase tracking-[0.2em] text-slate-400">Your Resume</h3>
-                </div>
-
-                <label className="block cursor-pointer rounded-2xl border border-dashed border-white/12 bg-[#0d1320] px-4 py-4 transition hover:border-accent/30 hover:bg-[#11182a]">
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt,.md"
-                    className="hidden"
-                    onChange={async (event) => {
-                      const nextFile = event.target.files?.[0] ?? null;
-                      await handleResumeFileChange(nextFile);
-                    }}
-                  />
-                  {!resumeFile ? (
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.05]">
-                        <UploadCloud size={18} className="text-slate-300" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-slate-100">Attach your resume</p>
-                        <p className="mt-1 text-xs leading-5 text-slate-400">
-                          We attach your resume context to the session payload so your interview setup stays personal and role-specific.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10">
-                        <Paperclip size={18} className="text-accent" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-slate-100">{resumeFile.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {(resumeFile.size / 1024 / 1024).toFixed(2)} MB attached
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          void handleResumeFileChange(null);
-                        }}
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/6 text-slate-300 transition hover:bg-white/10"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-                </label>
-
-                <label className="mt-4 block space-y-2">
-                  <span className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Resume Notes</span>
-                  <textarea
-                    value={resumeNotes}
-                    onChange={(event) => setResumeNotes(event.target.value)}
-                    placeholder="Key wins, tools, domain background, or anything you want the session context to remember."
-                    rows={4}
-                    className={`${fieldClassName} min-h-[110px]`}
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className={`space-y-4 ${isCompactLayout ? "" : "sm:space-y-5"}`}>
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <Target size={15} className="text-slate-300" />
-                <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Current Prompt</h2>
-              </div>
-              <p className="text-xl leading-8 text-slate-50 sm:text-2xl sm:leading-9">{question}</p>
-              <p className="mt-4 text-sm leading-7 text-slate-400">
-                {isCompactLayout
-                  ? "Submit an answer to update the session and get the next follow-up."
-                  : "Submit an answer to update your transcript, analysis, and the next follow-up question from the live session."}
-              </p>
-            </div>
-
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers3 size={15} className="text-slate-300" />
-                  <h2 className="text-xs font-mono uppercase tracking-[0.24em] text-slate-400">Live Session Snapshot</h2>
-                </div>
-                <span className={`rounded-full border px-3 py-1 text-[11px] font-mono uppercase tracking-[0.18em] ${getPlanAccent(currentPlan)}`}>
-                  {formatPlanLabel(currentPlan)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Current Stage</p>
-                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
-                    {formatStageLabel(currentSession?.currentStage || "setup")}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Answered</p>
-                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
-                    {currentSession?.questionCount ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Credits</p>
-                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
-                    {currentSession?.sessionCredits ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-xs font-mono uppercase tracking-[0.18em] text-slate-400">Status</p>
-                  <p className="mt-2 text-lg font-display tracking-[0.08em] text-slate-100">
-                    {currentSession?.activeSession ? "In Progress" : "Standby"}
-                  </p>
+        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <aside className="space-y-5">
+            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_28px_80px_rgba(0,0,0,0.34)] sm:p-6">
+              <p className="text-sm uppercase tracking-[0.24em] text-accent">Simulation setup</p><h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Live AI interview loop</h1>
+              <p className="mt-4 text-base leading-8 text-slate-300">Set the role, add your context, then answer like it is the real thing. RolePrep handles pressure, scoring, and next-question flow.</p>
+              <div className="mt-6 grid gap-4">
+                <label className="block space-y-2"><span className="text-sm uppercase tracking-[0.18em] text-slate-400">Target role</span><input type="text" value={role} onChange={(event) => setRole(event.target.value)} placeholder="Senior frontend engineer" className="w-full rounded-[22px] border border-white/10 bg-[#0f1420] px-4 py-3 text-base text-slate-100 outline-none transition-all duration-200 ease-in-out placeholder:text-slate-500 focus:border-accent/30 focus:bg-[#121826]" /></label>
+                <label className="block space-y-2"><span className="text-sm uppercase tracking-[0.18em] text-slate-400">Job description</span><textarea value={jdText} onChange={(event) => setJdText(event.target.value)} rows={6} placeholder="Paste the JD so the AI scores your answers against the actual role." className="w-full rounded-[22px] border border-white/10 bg-[#0f1420] px-4 py-3 text-base leading-7 text-slate-100 outline-none transition-all duration-200 ease-in-out placeholder:text-slate-500 focus:border-accent/30 focus:bg-[#121826]" /></label>
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex items-center gap-2"><Paperclip size={16} className="text-accent" /><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Your resume</p></div>
+                  <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-[20px] border border-dashed border-white/12 bg-[#0d1320] px-4 py-4 transition-all duration-200 ease-in-out hover:border-accent/20 hover:bg-[#11182a]">
+                    <input type="file" accept=".pdf,.doc,.docx,.txt,.md" className="hidden" onChange={async (event) => { await handleResumeUpload(event.target.files?.[0] ?? null); }} />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.05]"><UploadCloud size={18} className="text-slate-200" /></div>
+                    <div className="min-w-0"><p className="text-base text-slate-100">{resumeFile ? resumeFile.name : "Attach your resume"}</p><p className="mt-1 text-sm leading-6 text-slate-400">Keep the interview grounded in your actual profile.</p></div>
+                  </label>
+                  <textarea value={resumeNotes} onChange={(event) => setResumeNotes(event.target.value)} rows={4} placeholder="Add achievements, tools, or context you want the interviewer to remember." className="mt-4 w-full rounded-[20px] border border-white/10 bg-[#0f1420] px-4 py-3 text-base leading-7 text-slate-100 outline-none transition-all duration-200 ease-in-out placeholder:text-slate-500 focus:border-accent/30 focus:bg-[#121826]" />
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div className="mb-5 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,20,32,0.95),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] sm:mb-6 sm:rounded-[28px] sm:p-6">
-          <div className="mb-4 flex w-fit items-center gap-1 rounded-2xl bg-white/[0.04] p-1">
-            {(["record", "upload"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setInputMode(mode)}
-                className={`rounded-xl px-5 py-2 text-xs font-mono uppercase tracking-[0.18em] transition-all ${
-                  inputMode === mode ? "bg-[#12192a] text-slate-100 shadow-[0_10px_24px_rgba(0,0,0,0.18)]" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+              <div className="flex items-center justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-slate-400">Access state</p><h2 className="mt-2 font-display text-3xl leading-none tracking-[0.05em] text-slate-50">{isPremium ? "Unlimited access active" : `${credits} sessions left`}</h2></div><Crown size={20} className="text-amber-200" /></div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.16em] text-slate-400">Plan</p><p className="mt-3 text-lg text-slate-100">{planLabel(currentPlan)}</p></div><div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.16em] text-slate-400">Expiry</p><p className="mt-3 text-lg text-slate-100">{timeLeft(currentSession?.subscriptionExpiry ?? 0)}</p></div></div>
+              <div className="mt-4 flex flex-wrap gap-2">{PLANS.map((plan) => <button key={plan.planType} type="button" onClick={() => void handleCheckout(plan.planType)} disabled={activeCheckoutPlan !== null} className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:border-accent/25 hover:bg-white/[0.06] disabled:opacity-60">{activeCheckoutPlan === plan.planType ? "Opening..." : plan.label}</button>)}</div>
+            </div>
+          </aside>
 
-          <div className={`grid gap-5 ${isCompactLayout ? "" : "lg:grid-cols-[0.95fr_1.05fr]"}`}>
-            <div className="space-y-4">
-              {inputMode === "record" ? (
-                <AudioRecorder onAudioReady={handleRecordReady} onReset={handleRecorderReset} />
-              ) : (
-                <UploadBox onFileReady={handleFileReady} />
-              )}
-
-              {error && (
-                <p className="rounded-2xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-rose-200">{error}</p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isAnalyzing || !audioBlob}
-                className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-sm font-mono uppercase tracking-[0.2em] transition-all ${
-                  isAnalyzing || !audioBlob
-                    ? "cursor-not-allowed bg-white/6 text-slate-500"
-                    : "bg-[linear-gradient(90deg,#00ff88,#f4b44c)] text-[#07110c] shadow-[0_18px_40px_rgba(0,255,136,0.16)] hover:scale-[1.01]"
-                }`}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Analyzing
-                  </>
-                ) : (
-                  <>
-                    <Send size={15} />
-                    Analyze Answer
-                  </>
-                )}
-              </button>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-7 text-slate-400">
-                The studio keeps your role, JD, resume context, stage, and current question aligned before each analysis pass.
-              </div>
+          <section className="space-y-5">
+            <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.97),rgba(8,11,20,0.95))] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:p-6">
+              {isLocked && <PaymentGate plans={PLANS} activeCheckoutPlan={activeCheckoutPlan} onCheckout={(planType) => void handleCheckout(planType)} />}
+              <div className="flex items-start justify-between gap-4"><div><p className="text-sm uppercase tracking-[0.24em] text-accent">Live simulation</p><h2 className="mt-3 font-display text-4xl leading-[0.95] tracking-[0.05em] text-slate-50 sm:text-5xl">Answer under pressure</h2></div><button type="button" onClick={() => fileInputRef.current?.click()} disabled={uiState === "processing"} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"><FileText size={16} />Upload audio</button></div>
+              <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={async (event) => { const file = event.target.files?.[0] ?? null; if (file) await submitResponse(file); event.target.value = ""; }} />
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-5 sm:p-6"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current question</p><p className="mt-4 text-2xl leading-10 text-slate-50 sm:text-3xl sm:leading-[3.1rem]">{question}</p></div>
+              <div className="mt-5 grid gap-4 md:grid-cols-3"><div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Status</p><p className="mt-3 text-lg text-slate-100">{statusText}</p></div><div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Current stage</p><p className="mt-3 text-lg text-slate-100">{currentSession?.currentStage?.replace(/_/g, " ") || "setup"}</p></div><div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Questions answered</p><p className="mt-3 text-lg text-slate-100">{currentSession?.questionCount ?? 0}</p></div></div>
+              {uiState === "processing" && <div className="mt-5 flex items-center gap-3 rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 text-base text-slate-100"><Loader2 size={18} className="animate-spin text-accent" />Processing your answer, scoring it, and generating the next question.</div>}
+              {error && <div className="mt-5 rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-base text-rose-200">{error}</div>}
+              {notice && <div className="mt-5 rounded-[24px] border border-accent/20 bg-accent/10 px-4 py-4 text-base text-emerald-200">{notice}</div>}
             </div>
 
-            {isCompactLayout ? (
-              <div className="space-y-4">
-                <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
-                <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
+            {uiState === "feedback" && analysis ? (
+              <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,22,36,0.96),rgba(8,11,20,0.96))] p-5 shadow-[0_26px_70px_rgba(0,0,0,0.3)] sm:p-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><p className="text-sm uppercase tracking-[0.2em] text-accent">Feedback ready</p><h3 className="mt-2 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{analysis.score}</h3><p className="mt-2 text-base text-slate-300">Interview response score out of 100</p></div><button type="button" onClick={() => { setUiState("next_question"); window.setTimeout(() => { setUiState("idle"); setAnalysis(null); setTranscript(""); setNotice("Next question loaded. Start when you're ready."); }, 700); }} className="inline-flex items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#00ff88,#f4b44c)] px-5 py-3 text-base font-medium text-[#07110c] transition-transform duration-200 ease-in-out hover:scale-[1.02]">Next question<RefreshCw size={18} /></button></div>
+                <div className="mt-6 grid gap-4 lg:grid-cols-2"><div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Strengths</p><ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">{(analysis.content.strengths.length ? analysis.content.strengths : ["Clear verbal structure", "Strong response momentum"]).slice(0, 2).map((item) => <li key={item}>• {item}</li>)}</ul></div><div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Weak areas</p><ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">{(analysis.content.issues.length ? analysis.content.issues : ["Add more measurable outcomes", "Tighten the close"]).slice(0, 2).map((item) => <li key={item}>• {item}</li>)}</ul></div></div>
+                <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Coach summary</p><p className="mt-3 text-base leading-8 text-slate-100">{analysis.content.summary || analysis.followUp.hint || "Your answer is moving in the right direction. Tighten proof points and close harder."}</p></div>
               </div>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <TranscriptPanel transcript={transcript} isLoading={isAnalyzing} />
-                <AnalysisPanel analysis={analysis} isLoading={isAnalyzing} />
-              </div>
+              <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6"><div className="flex items-center gap-2"><Sparkles size={16} className="text-accent" /><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Live feedback panel</p></div><p className="mt-4 text-base leading-8 text-slate-300">Finish a response and RolePrep will show your score, top strengths, weakest spots, and the next question to keep the pressure on.</p>{transcript && <div className="mt-5 rounded-[24px] border border-white/10 bg-white/[0.03] p-4"><p className="text-sm uppercase tracking-[0.18em] text-slate-400">Latest transcript</p><p className="mt-3 text-base leading-8 text-slate-100">{transcript}</p></div>}</div>
             )}
-          </div>
+
+            <SupportFooter />
+          </section>
         </div>
 
-        <SupportFooter />
+        <div className={`fixed z-40 ${isMobileLayout ? "bottom-4 left-4 right-4" : "bottom-6 right-6 w-[360px]"}`}>
+          <button type="button" onClick={() => void handleMicButton()} disabled={uiState === "processing" || isLocked} className={`flex w-full items-center justify-center gap-3 rounded-full px-6 py-4 text-base font-medium transition-all duration-200 ease-in-out ${uiState === "processing" || isLocked ? "cursor-not-allowed bg-white/[0.08] text-slate-500" : uiState === "listening" ? "bg-[linear-gradient(90deg,#ff6b6b,#f4b44c)] text-white shadow-[0_18px_40px_rgba(255,107,107,0.25)] hover:scale-[1.01]" : "bg-[linear-gradient(90deg,#00ff88,#f4b44c)] text-[#07110c] shadow-[0_20px_42px_rgba(0,255,136,0.18)] hover:scale-[1.01]"}`}>
+            {uiState === "processing" ? <><Loader2 size={20} className="animate-spin" />Processing...</> : uiState === "listening" ? <><PauseCircle size={20} />Listening...</> : <><Mic size={20} />Start speaking</>}
+          </button>
+        </div>
       </div>
     </div>
   );
