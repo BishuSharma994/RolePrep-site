@@ -95,6 +95,10 @@ function extractStringList(value: unknown) {
     .filter(Boolean);
 }
 
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
 function normalizeSession(session: BackendSessionPayload): Session {
   return {
     userId: String(session.user_id ?? ""),
@@ -203,6 +207,7 @@ export function normalizeAnalysisResponse(payload: unknown) {
   const delivery = normalizeScoreDetail(scores.delivery);
   const structure = normalizeScoreDetail(scores.structure);
   const specificity = normalizeScoreDetail(scores.specificity);
+  const scoreReasons = [structure, specificity, clarity, relevance, delivery];
 
   const scoreEntries = [
     { label: "Structure", ...structure },
@@ -221,13 +226,25 @@ export function normalizeAnalysisResponse(payload: unknown) {
   const issues = extractIssues(content.failures);
   const strengths = extractStringList(content.strengths ?? analysis.strengths);
   const explicitIssues = extractStringList(content.issues ?? analysis.issues);
+  const derivedStrengths = uniqueStrings(
+    scoreReasons
+      .filter((detail) => detail.score >= 18 && detail.reason)
+      .sort((left, right) => right.score - left.score)
+      .map((detail) => detail.reason),
+  ).slice(0, 3);
+  const derivedIssues = uniqueStrings(
+    scoreReasons
+      .filter((detail) => detail.score > 0 && detail.score < 18 && detail.reason)
+      .sort((left, right) => left.score - right.score)
+      .map((detail) => detail.reason),
+  ).slice(0, 3);
   const followupHint = String(followup.hint ?? followup.coaching_hint ?? "");
 
   const normalized: AnalysisResult = {
     score: clampPercentage(overallScore),
     content: {
-      issues: explicitIssues.length ? explicitIssues : issues,
-      strengths,
+      issues: uniqueStrings(explicitIssues.length ? explicitIssues : [...issues, ...derivedIssues]).slice(0, 4),
+      strengths: uniqueStrings(strengths.length ? strengths : derivedStrengths).slice(0, 3),
       clarity: clampPercentage((clarity.score / 25) * 100),
       relevance: clampPercentage((relevance.score / 25) * 100),
       summary: feedbackSummary,

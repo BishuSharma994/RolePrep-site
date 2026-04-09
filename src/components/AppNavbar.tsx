@@ -22,14 +22,14 @@ export default function AppNavbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/8 bg-[rgba(7,11,20,0.78)] backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 sm:py-3">
         <Link to="/" className="group inline-flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent shadow-[0_12px_32px_rgba(0,255,136,0.12)] transition-transform duration-200 ease-in-out group-hover:-translate-y-0.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent shadow-[0_12px_32px_rgba(0,255,136,0.12)] transition-transform duration-200 ease-in-out group-hover:-translate-y-0.5 sm:h-11 sm:w-11">
             RP
           </div>
           <div>
-            <p className="font-display text-2xl leading-none tracking-[0.14em] text-slate-50 sm:text-3xl">RolePrep</p>
-            <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-slate-400 sm:text-xs">AI interview simulator</p>
+            <p className="font-display text-[1.8rem] leading-none tracking-[0.14em] text-slate-50 sm:text-3xl">RolePrep</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-slate-400 sm:text-xs">AI interview simulator</p>
           </div>
         </Link>
 
@@ -65,7 +65,7 @@ export default function AppNavbar() {
           <button
             type="button"
             onClick={() => setIsOpen((value) => !value)}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-100 transition hover:border-white/20 hover:bg-white/[0.08]"
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-100 transition hover:border-white/20 hover:bg-white/[0.08]"
             aria-label="Toggle navigation"
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}

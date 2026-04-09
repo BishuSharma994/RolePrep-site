@@ -24,7 +24,7 @@ import {
   type PlanType,
 } from "../services/api";
 import InterviewLayout from "../components/InterviewLayout";
-import { useStore } from "../store";
+import { useStore, type Session } from "../store";
 import { track } from "../utils/track";
 
 type UiState = "idle" | "listening" | "processing" | "feedback" | "next_question";
@@ -69,6 +69,38 @@ function errorText(error: unknown) {
     }
   }
   return error instanceof Error && error.message ? error.message : "Something went wrong. Please try again.";
+}
+
+function applyLocalSessionProgress(session: Session, nextQuestion: string, transcript: string, score: number): Session {
+  const nextQuestionCount = Math.min(5, (session.questionCount ?? 0) + 1);
+
+  return {
+    ...session,
+    currentQuestion: nextQuestion,
+    currentStage: nextQuestionCount >= 5 ? "complete" : "followup",
+    questionCount: nextQuestionCount,
+    history: transcript ? [...session.history, transcript] : session.history,
+    scores: [...session.scores, Number((score / 10).toFixed(1))],
+    updatedAt: Date.now(),
+    lastSessionActivityAt: Date.now(),
+  };
+}
+
+function mergeSessionWithLocalState(incomingSession: Session, localSession: Session | null) {
+  if (!localSession || localSession.sessionId !== incomingSession.sessionId || localSession.questionCount <= incomingSession.questionCount) {
+    return incomingSession;
+  }
+
+  return {
+    ...incomingSession,
+    currentQuestion: localSession.currentQuestion,
+    currentStage: localSession.currentStage,
+    questionCount: localSession.questionCount,
+    history: localSession.history,
+    scores: localSession.scores,
+    updatedAt: localSession.updatedAt,
+    lastSessionActivityAt: localSession.lastSessionActivityAt,
+  };
 }
 
 function isAccessBlockedError(error: unknown) {
@@ -136,7 +168,6 @@ export default function InterviewPage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeExcerpt, setResumeExcerpt] = useState("");
   const [question, setQuestion] = useState(QUESTIONS[0]);
-  const [questionNumber, setQuestionNumber] = useState(1);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
@@ -151,6 +182,10 @@ export default function InterviewPage() {
   const countdown = Math.max(0, MAX_SECONDS - duration);
   const isMobileLayout = device.isMobile || device.isStandalone;
   const isUrgent = uiState === "listening" && countdown <= 10;
+  const answeredCount = currentSession?.questionCount ?? 0;
+  const displayQuestionNumber = uiState === "feedback" ? Math.max(1, Math.min(5, answeredCount)) : Math.min(5, answeredCount + 1);
+  const transcriptWordCount = transcript.trim() ? transcript.trim().split(/\s+/).filter(Boolean).length : 0;
+  const feedbackLooksThin = uiState === "feedback" && transcriptWordCount > 0 && transcriptWordCount < 4;
   const statusText = useMemo(
     () =>
       uiState === "listening"
@@ -167,20 +202,21 @@ export default function InterviewPage() {
 
   const refreshSessions = async () => {
     const nextSessions = await getSessions(userId);
-    setSessions(nextSessions);
+    const mergedSessions = nextSessions.length > 0 ? [mergeSessionWithLocalState(nextSessions[0], currentSession), ...nextSessions.slice(1)] : [];
+    setSessions(mergedSessions);
 
-    if (nextSessions[0]) {
-      setCurrentSession(nextSessions[0]);
-      setSessionContextKey(`${nextSessions[0].role.trim()}::${nextSessions[0].jdText.trim()}`);
-      if (nextSessions[0].currentQuestion) {
-        setQuestion(nextSessions[0].currentQuestion);
+    if (mergedSessions[0]) {
+      setCurrentSession(mergedSessions[0]);
+      setSessionContextKey(`${mergedSessions[0].role.trim()}::${mergedSessions[0].jdText.trim()}`);
+      if (mergedSessions[0].currentQuestion) {
+        setQuestion(mergedSessions[0].currentQuestion);
       }
     } else {
       setCurrentSession(null);
       setSessionContextKey("");
     }
 
-    return nextSessions[0] ?? null;
+    return mergedSessions[0] ?? null;
   };
 
   useEffect(() => window.localStorage.setItem("roleprep_role", role), [role]);
@@ -195,13 +231,6 @@ export default function InterviewPage() {
       setQuestion(currentSession.currentQuestion);
     }
   }, [currentSession?.currentQuestion]);
-
-  useEffect(() => {
-    if (uiState === "idle") {
-      const nextQuestionNumber = Math.min(5, Math.max(1, (currentSession?.questionCount ?? 0) + 1));
-      setQuestionNumber(nextQuestionNumber);
-    }
-  }, [currentSession?.questionCount, uiState]);
 
   useEffect(() => {
     if (recorderState === "recording") {
@@ -269,7 +298,7 @@ export default function InterviewPage() {
     setTranscript("");
 
     try {
-      await ensureSession();
+      const session = await ensureSession();
       const processingStartedAt = Date.now();
 
       const file =
@@ -291,12 +320,17 @@ export default function InterviewPage() {
       if (remainingDelay > 0) {
         await new Promise((resolve) => window.setTimeout(resolve, remainingDelay));
       }
+      const fallbackQuestion = QUESTIONS[Math.min(QUESTIONS.length - 1, session.questionCount + 1)] ?? question;
+      const nextQuestion = normalized.analysis.followUp.question.trim() || fallbackQuestion || question;
+      const nextSession = applyLocalSessionProgress(session, nextQuestion, normalized.transcript, normalized.analysis.score);
       setTranscript(normalized.transcript);
       setAnalysis(normalized.analysis);
-      if (normalized.analysis.followUp.question) {
-        setQuestion(normalized.analysis.followUp.question);
+      setQuestion(nextQuestion);
+      setCurrentSession(nextSession);
+      setSessions([nextSession, ...sessions.filter((entry) => entry.sessionId !== nextSession.sessionId)]);
+      if (normalized.transcript.trim().split(/\s+/).filter(Boolean).length < 4) {
+        setNotice("Transcript was very short. Review the score carefully before trusting it.");
       }
-      await refreshSessions();
       setUiState("feedback");
     } catch (submissionError) {
       if (isAccessBlockedError(submissionError)) {
@@ -409,7 +443,7 @@ export default function InterviewPage() {
   }
 
   useEffect(() => {
-    if (uiState !== "feedback" || questionNumber < 5) {
+    if (uiState !== "feedback" || answeredCount < 5) {
       return;
     }
 
@@ -421,25 +455,19 @@ export default function InterviewPage() {
     }, 2200);
 
     return () => window.clearTimeout(redirectTimer);
-  }, [navigate, questionNumber, setAnalysis, setTranscript, uiState]);
+  }, [answeredCount, navigate, setAnalysis, setTranscript, uiState]);
 
-  const strengthItems =
-    analysis?.content.strengths.length
-      ? analysis.content.strengths.slice(0, 2)
-      : ["Strength not returned by backend yet.", "Strength not returned by backend yet."];
-  const weaknessItems =
-    analysis?.content.issues.length
-      ? analysis.content.issues.slice(0, 2)
-      : ["Weakness not returned by backend yet.", "Weakness not returned by backend yet."];
+  const strengthItems = analysis?.content.strengths.slice(0, 3) ?? [];
+  const weaknessItems = analysis?.content.issues.slice(0, 3) ?? [];
 
   return (
-    <div className="min-h-dvh bg-[#070b14] noise-overlay pb-32">
+    <div className="min-h-dvh bg-[#070b14] noise-overlay pb-44 sm:pb-32">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute inset-x-0 top-0 h-[360px] bg-[radial-gradient(circle_at_top,_rgba(244,180,76,0.16),_transparent_38%),radial-gradient(circle_at_20%_20%,_rgba(0,255,136,0.12),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(74,144,226,0.12),_transparent_30%)]" />
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-6">
-        <div className="sticky top-[76px] z-30 mb-5 grid items-center gap-3 rounded-[26px] border border-white/10 bg-[rgba(10,14,24,0.85)] px-4 py-3 backdrop-blur-xl md:grid-cols-[1fr_auto_1fr]">
+        <div className="sticky top-[68px] z-30 mb-5 grid items-center gap-3 rounded-[22px] border border-white/10 bg-[rgba(10,14,24,0.85)] px-3 py-3 backdrop-blur-xl sm:top-[76px] sm:rounded-[26px] sm:px-4 md:grid-cols-[1fr_auto_1fr]">
           <div className="hidden items-center gap-3 md:flex">
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200">
               {isPremium ? "Unlimited access active" : `${credits} sessions left`}
@@ -448,11 +476,11 @@ export default function InterviewPage() {
           </div>
 
           <div className="mx-auto flex items-center gap-2">
-            <div className={`rounded-full border px-5 py-2 text-center text-base font-medium ${isUrgent ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-accent/20 bg-accent/10 text-accent"}`}>
+            <div className={`rounded-full border px-4 py-2 text-center text-sm font-medium sm:px-5 sm:text-base ${isUrgent ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "border-accent/20 bg-accent/10 text-accent"}`}>
               {uiState === "listening" ? timerLabel(countdown) : timerLabel(MAX_SECONDS)}
             </div>
             <div className={`rounded-full border px-4 py-2 text-sm uppercase tracking-[0.18em] ${isUrgent ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : "border-white/10 bg-white/[0.04] text-slate-200"}`}>
-              Q {questionNumber}/5
+              Q {displayQuestionNumber}/5
             </div>
           </div>
 
@@ -461,7 +489,7 @@ export default function InterviewPage() {
               type="button"
               onClick={() => void handleRefreshAccess()}
               disabled={isRefreshing}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60 sm:px-4"
             >
               {isRefreshing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
               Refresh
@@ -469,7 +497,7 @@ export default function InterviewPage() {
 
             <Link
               to="/"
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08] sm:px-4"
             >
               <LogOut size={16} />
               Exit
@@ -479,9 +507,9 @@ export default function InterviewPage() {
 
         <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
           <aside className="space-y-5">
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_28px_80px_rgba(0,0,0,0.34)] sm:p-6">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-4 shadow-[0_28px_80px_rgba(0,0,0,0.34)] sm:rounded-[28px] sm:p-6">
               <p className="text-sm uppercase tracking-[0.24em] text-accent">Interview brief</p>
-              <h1 className="mt-3 font-display text-4xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Set the role. Then perform.</h1>
+              <h1 className="mt-3 font-display text-3xl leading-[0.92] tracking-[0.05em] text-slate-50 sm:text-5xl">Set the role. Then perform.</h1>
               <p className="mt-4 text-base leading-8 text-slate-300">Load the role and resume context once. The timed round takes over from there.</p>
 
               <div className="mt-6 grid gap-4">
@@ -542,11 +570,11 @@ export default function InterviewPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:rounded-[28px] sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Access state</p>
-                  <h2 className="mt-2 font-display text-3xl leading-none tracking-[0.05em] text-slate-50">
+                  <h2 className="mt-2 font-display text-[2rem] leading-none tracking-[0.05em] text-slate-50 sm:text-3xl">
                     {isPremium ? "Unlimited access active" : `${credits} sessions left`}
                   </h2>
                 </div>
@@ -586,8 +614,8 @@ export default function InterviewPage() {
                 question={question}
                 statusText={statusText}
                 stageText={currentSession?.currentStage?.replace(/_/g, " ") || "setup"}
-                answeredCount={currentSession?.questionCount ?? 0}
-                questionNumber={questionNumber}
+                answeredCount={answeredCount}
+                questionNumber={displayQuestionNumber}
                 totalQuestions={5}
                 isProcessing={uiState === "processing"}
                 isLocked={isLocked}
@@ -613,22 +641,23 @@ export default function InterviewPage() {
             </div>
 
             {uiState === "feedback" && analysis ? (
-              <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,22,36,0.96),rgba(8,11,20,0.96))] p-5 shadow-[0_26px_70px_rgba(0,0,0,0.3)] sm:p-6">
+              <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(17,22,36,0.96),rgba(8,11,20,0.96))] p-4 shadow-[0_26px_70px_rgba(0,0,0,0.3)] sm:rounded-[28px] sm:p-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="text-sm uppercase tracking-[0.2em] text-accent">Feedback ready</p>
-                    <h3 className="mt-2 font-display text-4xl leading-none tracking-[0.05em] text-slate-50">{analysis.score}/100</h3>
-                    <p className="mt-2 text-base text-slate-300">Score for question {questionNumber} of 5</p>
-                    {questionNumber >= 5 && <p className="mt-2 text-sm uppercase tracking-[0.18em] text-amber-200">Final round complete. Redirecting to dashboard...</p>}
+                    <h3 className="mt-2 font-display text-3xl leading-none tracking-[0.05em] text-slate-50 sm:text-4xl">{analysis.score}/100</h3>
+                    <p className="mt-2 text-base text-slate-300">Score for question {displayQuestionNumber} of 5</p>
+                    {answeredCount >= 5 && <p className="mt-2 text-sm uppercase tracking-[0.18em] text-amber-200">Final round complete. Redirecting to dashboard...</p>}
+                    {analysis.content.summary && <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">{analysis.content.summary}</p>}
+                    {feedbackLooksThin && <p className="mt-3 rounded-[18px] border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">The transcript came back very short, so this score may be less reliable.</p>}
                   </div>
 
-                  {questionNumber < 5 && (
+                  {answeredCount < 5 && (
                     <button
                       type="button"
                       onClick={() => {
                         setUiState("next_question");
                         window.setTimeout(() => {
-                          setQuestionNumber((value) => Math.min(5, value + 1));
                           setUiState("idle");
                           setAnalysis(null);
                           setTranscript("");
@@ -646,21 +675,36 @@ export default function InterviewPage() {
                 <div className="mt-6 grid gap-4 lg:grid-cols-2">
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Strengths</p>
-                    <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {strengthItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
-                    </ul>
+                    {strengthItems.length > 0 ? (
+                      <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
+                        {strengthItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="mt-4 text-sm leading-7 text-slate-400">No positive signals came back from the backend for this answer.</p>
+                    )}
                   </div>
 
                   <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Weak areas</p>
-                    <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
-                      {weaknessItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
-                    </ul>
+                    {weaknessItems.length > 0 ? (
+                      <ul className="mt-4 space-y-3 text-base leading-7 text-slate-100">
+                        {weaknessItems.map((item, index) => <li key={`${item}-${index}`}>- {item}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="mt-4 text-sm leading-7 text-slate-400">No backend issues were returned for this answer.</p>
+                    )}
                   </div>
                 </div>
+
+                {transcript && (
+                  <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Transcript used for scoring</p>
+                    <p className="mt-3 text-base leading-8 text-slate-100">{transcript}</p>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+              <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,24,38,0.96),rgba(8,11,20,0.94))] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:rounded-[28px] sm:p-6">
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-accent" />
                   <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Feedback panel</p>
@@ -684,7 +728,7 @@ export default function InterviewPage() {
             type="button"
             onClick={() => void handleMicButton()}
             disabled={uiState === "processing" || isLocked}
-            className={`flex w-full items-center justify-center gap-3 rounded-full px-6 py-4 text-base font-medium transition-all duration-200 ease-in-out ${
+            className={`flex w-full items-center justify-center gap-3 rounded-full px-6 py-3.5 text-sm font-medium transition-all duration-200 ease-in-out sm:py-4 sm:text-base ${
               uiState === "processing" || isLocked
                 ? "cursor-not-allowed bg-white/[0.08] text-slate-500"
                 : uiState === "listening"
