@@ -67,6 +67,7 @@ export default function AccountAccessPanel() {
   const authToken = useStore((state) => state.authToken);
   const authenticatedEmail = useStore((state) => state.authenticatedEmail);
   const authenticatedUserId = useStore((state) => state.authenticatedUserId);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const authExpiry = useStore((state) => state.authExpiry);
   const authRequired = useStore((state) => state.authRequired);
   const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
@@ -76,11 +77,12 @@ export default function AccountAccessPanel() {
   const pendingStartInterview = useStore((state) => state.pendingStartInterview);
   const pendingRoute = useStore((state) => state.pendingRoute);
   const setAuthSession = useStore((state) => state.setAuthSession);
+  const setLinkedAccountUserId = useStore((state) => state.setLinkedAccountUserId);
   const clearAuthSession = useStore((state) => state.clearAuthSession);
+  const clearLinkedAccountUserId = useStore((state) => state.clearLinkedAccountUserId);
   const setActiveUserId = useStore((state) => state.setActiveUserId);
   const setSessions = useStore((state) => state.setSessions);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
-  const openAccountAccess = useStore((state) => state.openAccountAccess);
   const closeAccountAccess = useStore((state) => state.closeAccountAccess);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const setPendingRoute = useStore((state) => state.setPendingRoute);
@@ -99,7 +101,8 @@ export default function AccountAccessPanel() {
   const [linkingCode, setLinkingCode] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const authModeLabel = authToken ? "Logged in" : "Anonymous";
+  const hasAccountAccess = Boolean(authToken || linkedAccountUserId);
+  const authModeLabel = authToken ? "Logged in" : linkedAccountUserId ? "Linked device" : "Anonymous";
   const syncCodeCountdown = useMemo(() => expiryLabel(generatedCodeExpiry), [generatedCodeExpiry]);
   const authExpiryCountdown = useMemo(() => expiryLabel(authExpiry), [authExpiry]);
 
@@ -222,13 +225,12 @@ export default function AccountAccessPanel() {
       if (authenticatedUserId && authenticatedUserId !== response.userId) {
         clearAuthSession();
       }
+      setLinkedAccountUserId(response.userId);
       setActiveUserId(response.userId);
       await refreshSessionsForUser(response.userId);
       setSyncCodeInput("");
 
-      if ((pendingStartInterview || pendingRoute) && !authToken) {
-        setNotice("Device linked. Login is still required before continuing.");
-      } else if (pendingStartInterview) {
+      if (pendingStartInterview) {
         setPendingRoute(null);
         setPendingStartInterview(false);
         closeAccountAccess();
@@ -269,7 +271,7 @@ export default function AccountAccessPanel() {
     } finally {
       clearAuthSession(anonymousModeAllowed);
       const fallbackUserId = useStore.getState().activeUserId;
-      if (anonymousModeAllowed && fallbackUserId) {
+      if ((linkedAccountUserId || anonymousModeAllowed) && fallbackUserId) {
         await refreshSessionsForUser(fallbackUserId);
       } else {
         setSessions([]);
@@ -289,6 +291,24 @@ export default function AccountAccessPanel() {
     closeAccountAccess();
   };
 
+  const handleUnlinkDevice = async () => {
+    clearLinkedAccountUserId();
+    clearAuthSession(anonymousModeAllowed);
+    const fallbackUserId = useStore.getState().activeUserId;
+
+    if (fallbackUserId) {
+      await refreshSessionsForUser(fallbackUserId);
+    } else {
+      setSessions([]);
+      setCurrentSession(null);
+    }
+
+    setPendingStartInterview(false);
+    setPendingRoute(null);
+    setNotice("Linked device access removed from this browser.");
+    setError("");
+  };
+
   if (!isAccountAccessOpen) {
     return null;
   }
@@ -302,7 +322,7 @@ export default function AccountAccessPanel() {
             <h2 className="mt-2 font-display text-3xl leading-none tracking-[0.05em] text-slate-50 sm:text-4xl">Login first, then continue</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base sm:leading-7">
               {authRequired && !authToken
-                ? "Your backend requires login before the interview can begin. Sign in with OTP, then we will continue automatically."
+                ? "Your backend requires login before the interview can begin, unless this device is already linked. Sign in with OTP or link this device to continue."
                 : "Manage OTP login and sync this device with your existing account."}
             </p>
           </div>
@@ -421,7 +441,7 @@ export default function AccountAccessPanel() {
           )}
         </div>
 
-        {authToken && (
+        {hasAccountAccess && (
           <div className="mt-4 flex justify-end">
             <button
               type="button"
@@ -432,6 +452,15 @@ export default function AccountAccessPanel() {
               <LogOut size={16} />
               {loggingOut ? "Signing out..." : "Logout"}
             </button>
+            {linkedAccountUserId && !authToken && (
+              <button
+                type="button"
+                onClick={() => void handleUnlinkDevice()}
+                className="ml-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-100 transition-all duration-200 ease-in-out hover:border-white/20 hover:bg-white/[0.08]"
+              >
+                Unlink device
+              </button>
+            )}
           </div>
         )}
 

@@ -28,6 +28,7 @@ function RouteLoader() {
 function AppShell() {
   const authToken = useStore((state) => state.authToken);
   const activeUserId = useStore((state) => state.activeUserId);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const setSessions = useStore((state) => state.setSessions);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
@@ -63,7 +64,7 @@ function AppShell() {
         });
       }
 
-      if (!authToken && !allowAnonymousMode) {
+      if (!authToken && !allowAnonymousMode && !linkedAccountUserId) {
         clearAuthSession(false);
         resolvedUserId = "";
       }
@@ -88,11 +89,11 @@ function AppShell() {
           }
 
           clearAuthSession(allowAnonymousMode);
-          resolvedUserId = allowAnonymousMode ? (useStore.getState().activeUserId || getOrCreateLocalUserId()) : "";
+          resolvedUserId = linkedAccountUserId || (allowAnonymousMode ? (useStore.getState().activeUserId || getOrCreateLocalUserId()) : "");
         }
       }
 
-      if (!resolvedUserId && !authToken) {
+      if (!resolvedUserId && !authToken && !linkedAccountUserId) {
         setSessions([]);
         setCurrentSession(null);
         return;
@@ -120,15 +121,15 @@ function AppShell() {
     return () => {
       isMounted = false;
     };
-  }, [authToken, clearAuthSession, setAuthConfig, setAuthSession, setCurrentSession, setSessions]);
+  }, [authToken, clearAuthSession, linkedAccountUserId, setAuthConfig, setAuthSession, setCurrentSession, setSessions]);
 
   useEffect(() => {
     const refreshAccessState = async () => {
-      if (!authToken && !anonymousModeAllowed) {
+      if (!authToken && !linkedAccountUserId && !anonymousModeAllowed) {
         return;
       }
 
-      if (!authToken && !activeUserId) {
+      if (!authToken && !linkedAccountUserId && !activeUserId) {
         return;
       }
 
@@ -158,7 +159,7 @@ function AppShell() {
       window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [activeUserId, anonymousModeAllowed, authToken, setCurrentSession, setSessions]);
+  }, [activeUserId, anonymousModeAllowed, authToken, linkedAccountUserId, setCurrentSession, setSessions]);
 
   return (
     <div className="min-h-dvh bg-bg-base">
@@ -173,13 +174,15 @@ function AppShell() {
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const location = useLocation();
   const authToken = useStore((state) => state.authToken);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const closePaywall = useStore((state) => state.closePaywall);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const setPendingRoute = useStore((state) => state.setPendingRoute);
+  const hasAccountAccess = Boolean(authToken || linkedAccountUserId);
 
   useEffect(() => {
-    if (!authToken) {
+    if (!hasAccountAccess) {
       closePaywall();
       if (location.pathname === "/interview") {
         setPendingRoute(null);
@@ -192,9 +195,9 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
       setPendingStartInterview(false);
       openAccountAccess(false);
     }
-  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, setPendingRoute, setPendingStartInterview]);
+  }, [closePaywall, hasAccountAccess, location.hash, location.pathname, location.search, openAccountAccess, setPendingRoute, setPendingStartInterview]);
 
-  if (!authToken) {
+  if (!hasAccountAccess) {
     return <Navigate to="/" replace />;
   }
 

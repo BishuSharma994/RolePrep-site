@@ -14,20 +14,24 @@ export default function AppNavbar() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const authToken = useStore((state) => state.authToken);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const currentSession = useStore((state) => state.currentSession);
   const activeUserId = useStore((state) => state.activeUserId);
   const authenticatedEmail = useStore((state) => state.authenticatedEmail);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const setPendingRoute = useStore((state) => state.setPendingRoute);
   const startInterview = useStartInterviewAction();
+  const hasAccountAccess = Boolean(authToken || linkedAccountUserId);
   const profileLabel = authenticatedEmail
     ? authenticatedEmail
+    : linkedAccountUserId
+      ? "Linked device"
     : currentSession?.selectedPlan
       ? `${currentSession.selectedPlan.replace(/_/g, " ")} user`
       : "RolePrep account";
 
   const handleProtectedNavigation = (path: string) => {
-    if (authToken) {
+    if (hasAccountAccess) {
       return;
     }
 
@@ -54,7 +58,7 @@ export default function AppNavbar() {
             to="/dashboard"
             className={({ isActive }) => navClassName(isActive)}
             onClick={(event) => {
-              if (!authToken) {
+              if (!hasAccountAccess) {
                 event.preventDefault();
                 handleProtectedNavigation("/dashboard");
               }
@@ -112,7 +116,7 @@ export default function AppNavbar() {
               to="/dashboard"
               className={() => navClassName(location.pathname === "/dashboard")}
               onClick={(event) => {
-                if (!authToken) {
+                if (!hasAccountAccess) {
                   event.preventDefault();
                   handleProtectedNavigation("/dashboard");
                   return;

@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 const USER_ID_STORAGE_KEY = "roleprep_web_user_id";
 const AUTH_STORAGE_KEY = "roleprep_auth_session";
+const LINKED_ACCOUNT_STORAGE_KEY = "roleprep_linked_account_user_id";
 
 interface StoredAuthSession {
   authToken: string;
@@ -121,6 +122,26 @@ function clearStoredUserId() {
   }
 }
 
+function readStoredLinkedAccountUserId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.localStorage.getItem(LINKED_ACCOUNT_STORAGE_KEY) ?? "";
+}
+
+function persistLinkedAccountUserId(userId: string) {
+  if (typeof window !== "undefined" && userId) {
+    window.localStorage.setItem(LINKED_ACCOUNT_STORAGE_KEY, userId);
+  }
+}
+
+function clearStoredLinkedAccountUserId() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(LINKED_ACCOUNT_STORAGE_KEY);
+  }
+}
+
 function toExpiryTimestamp(value: number | string | null | undefined) {
   if (typeof value === "number") {
     return value > 10_000_000_000 ? value : value * 1000;
@@ -151,6 +172,7 @@ interface AppState {
   authToken: string | null;
   authenticatedEmail: string;
   authenticatedUserId: string;
+  linkedAccountUserId: string;
   authExpiry: number;
   authRequired: boolean;
   anonymousModeAllowed: boolean;
@@ -173,6 +195,8 @@ interface AppState {
 
   setActiveUserId: (userId: string) => void;
   setAuthSession: (session: { authToken: string; email: string; userId: string; expiresAt: number }) => void;
+  setLinkedAccountUserId: (userId: string) => void;
+  clearLinkedAccountUserId: () => void;
   clearAuthSession: (allowAnonymousFallback?: boolean) => void;
   setAuthConfig: (config: { authRequired: boolean; anonymousModeAllowed: boolean; otpLoginEnabled: boolean; accountSyncEnabled: boolean }) => void;
   openAccountAccess: (pendingStartInterview?: boolean) => void;
@@ -192,7 +216,8 @@ interface AppState {
 }
 
 const initialAuthSession = readStoredAuthSession();
-const initialUserId = initialAuthSession?.userId || ensureStoredUserId();
+const initialLinkedAccountUserId = readStoredLinkedAccountUserId();
+const initialUserId = initialAuthSession?.userId || initialLinkedAccountUserId || ensureStoredUserId();
 
 function upsertSession(existingSessions: Session[], nextSession: Session) {
   const index = existingSessions.findIndex((session) => session.sessionId === nextSession.sessionId);
@@ -211,6 +236,7 @@ export const useStore = create<AppState>((set) => ({
   authToken: initialAuthSession?.authToken ?? null,
   authenticatedEmail: initialAuthSession?.email ?? "",
   authenticatedUserId: initialAuthSession?.userId ?? "",
+  linkedAccountUserId: initialLinkedAccountUserId,
   authExpiry: initialAuthSession?.expiresAt ?? 0,
   authRequired: false,
   anonymousModeAllowed: true,
@@ -246,18 +272,29 @@ export const useStore = create<AppState>((set) => ({
       authExpiry: expiresAt,
     });
   },
+  setLinkedAccountUserId: (userId) => {
+    persistLinkedAccountUserId(userId);
+    persistUserId(userId);
+    set({ linkedAccountUserId: userId, activeUserId: userId });
+  },
+  clearLinkedAccountUserId: () => {
+    clearStoredLinkedAccountUserId();
+    set({ linkedAccountUserId: "" });
+  },
   clearAuthSession: (allowAnonymousFallback = true) => {
     clearStoredAuthSession();
     if (!allowAnonymousFallback) {
       clearStoredUserId();
     }
 
-    const fallbackUserId = allowAnonymousFallback ? ensureStoredUserId() : "";
+    const linkedAccountUserId = readStoredLinkedAccountUserId();
+    const fallbackUserId = linkedAccountUserId || (allowAnonymousFallback ? ensureStoredUserId() : "");
     set({
       activeUserId: fallbackUserId,
       authToken: null,
       authenticatedEmail: "",
       authenticatedUserId: "",
+      linkedAccountUserId,
       authExpiry: 0,
       currentSession: null,
       sessions: [],

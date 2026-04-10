@@ -115,6 +115,7 @@ export default function InterviewPage() {
   const navigate = useNavigate();
   const activeUserId = useStore((state) => state.activeUserId);
   const authToken = useStore((state) => state.authToken);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const transcript = useStore((state) => state.transcript);
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
@@ -145,6 +146,7 @@ export default function InterviewPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sessionContextKey, setSessionContextKey] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasAccountAccess = Boolean(authToken || linkedAccountUserId);
 
   const currentPlan = currentSession?.activeSessionPlan || currentSession?.selectedPlan || "free";
   const isPremium = premiumActive || currentPlan === "premium";
@@ -382,7 +384,7 @@ export default function InterviewPage() {
   async function handleMicButton() {
     if (uiState === "processing") return;
     if (recorderState === "recording") return stop();
-    if (!authToken) {
+    if (!hasAccountAccess) {
       setPendingStartInterview(true);
       openAccountAccess(true);
       return;

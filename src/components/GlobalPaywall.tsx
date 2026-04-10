@@ -14,12 +14,14 @@ const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: st
 export default function GlobalPaywall() {
   const navigate = useNavigate();
   const authToken = useStore((state) => state.authToken);
+  const linkedAccountUserId = useStore((state) => state.linkedAccountUserId);
   const isPaywallOpen = useStore((state) => state.isPaywallOpen);
   const activeUserId = useStore((state) => state.activeUserId);
   const closePaywall = useStore((state) => state.closePaywall);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const [activeCheckoutPlan, setActiveCheckoutPlan] = useState<PlanType | null>(null);
+  const hasAccountAccess = Boolean(authToken || linkedAccountUserId);
 
   useEffect(() => {
     if (isPaywallOpen) {
@@ -32,7 +34,7 @@ export default function GlobalPaywall() {
   }
 
   const handleCheckout = async (planType: PlanType) => {
-    if (!authToken) {
+    if (!hasAccountAccess) {
       closePaywall();
       setPendingStartInterview(true);
       openAccountAccess(true);
@@ -55,7 +57,7 @@ export default function GlobalPaywall() {
   };
 
   const handleFreeSession = () => {
-    if (!authToken) {
+    if (!hasAccountAccess) {
       closePaywall();
       setPendingStartInterview(true);
       openAccountAccess(true);
