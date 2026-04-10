@@ -22,7 +22,7 @@ export const track = (event, data = {}) => {
     body: JSON.stringify({
       event,
       data,
-      user_id: authUserId || localStorage.getItem("user_id") || localStorage.getItem("roleprep_web_user_id"),
+      user_id: authUserId || localStorage.getItem("roleprep_web_user_id") || localStorage.getItem("user_id"),
     }),
   }).catch(() => {});
 };

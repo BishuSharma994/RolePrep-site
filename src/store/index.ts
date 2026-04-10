@@ -115,6 +115,12 @@ function clearStoredAuthSession() {
   }
 }
 
+function clearStoredUserId() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(USER_ID_STORAGE_KEY);
+  }
+}
+
 function toExpiryTimestamp(value: number | string | null | undefined) {
   if (typeof value === "number") {
     return value > 10_000_000_000 ? value : value * 1000;
@@ -167,7 +173,7 @@ interface AppState {
 
   setActiveUserId: (userId: string) => void;
   setAuthSession: (session: { authToken: string; email: string; userId: string; expiresAt: number }) => void;
-  clearAuthSession: () => void;
+  clearAuthSession: (allowAnonymousFallback?: boolean) => void;
   setAuthConfig: (config: { authRequired: boolean; anonymousModeAllowed: boolean; otpLoginEnabled: boolean; accountSyncEnabled: boolean }) => void;
   openAccountAccess: (pendingStartInterview?: boolean) => void;
   closeAccountAccess: () => void;
@@ -240,15 +246,23 @@ export const useStore = create<AppState>((set) => ({
       authExpiry: expiresAt,
     });
   },
-  clearAuthSession: () => {
+  clearAuthSession: (allowAnonymousFallback = true) => {
     clearStoredAuthSession();
-    const fallbackUserId = ensureStoredUserId();
+    if (!allowAnonymousFallback) {
+      clearStoredUserId();
+    }
+
+    const fallbackUserId = allowAnonymousFallback ? ensureStoredUserId() : "";
     set({
       activeUserId: fallbackUserId,
       authToken: null,
       authenticatedEmail: "",
       authenticatedUserId: "",
       authExpiry: 0,
+      currentSession: null,
+      sessions: [],
+      entitlementHydrated: false,
+      ...deriveEntitlement(null),
     });
   },
   setAuthConfig: ({ authRequired, anonymousModeAllowed, otpLoginEnabled, accountSyncEnabled }) =>

@@ -27,6 +27,8 @@ function RouteLoader() {
 
 function AppShell() {
   const authToken = useStore((state) => state.authToken);
+  const activeUserId = useStore((state) => state.activeUserId);
+  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const setSessions = useStore((state) => state.setSessions);
   const setCurrentSession = useStore((state) => state.setCurrentSession);
   const setAuthSession = useStore((state) => state.setAuthSession);
@@ -38,6 +40,7 @@ function AppShell() {
 
     const bootstrap = async () => {
       let resolvedUserId = getOrCreateLocalUserId();
+      let allowAnonymousMode = true;
 
       try {
         const authConfig = await getAuthConfig();
@@ -46,6 +49,7 @@ function AppShell() {
         }
 
         setAuthConfig(authConfig);
+        allowAnonymousMode = authConfig.anonymousModeAllowed;
       } catch {
         if (!isMounted) {
           return;
@@ -57,6 +61,11 @@ function AppShell() {
           otpLoginEnabled: true,
           accountSyncEnabled: true,
         });
+      }
+
+      if (!authToken && !allowAnonymousMode) {
+        clearAuthSession(false);
+        resolvedUserId = "";
       }
 
       if (authToken) {
@@ -78,9 +87,15 @@ function AppShell() {
             return;
           }
 
-          clearAuthSession();
-          resolvedUserId = useStore.getState().activeUserId || getOrCreateLocalUserId();
+          clearAuthSession(allowAnonymousMode);
+          resolvedUserId = allowAnonymousMode ? (useStore.getState().activeUserId || getOrCreateLocalUserId()) : "";
         }
+      }
+
+      if (!resolvedUserId && !authToken) {
+        setSessions([]);
+        setCurrentSession(null);
+        return;
       }
 
       try {
@@ -107,6 +122,44 @@ function AppShell() {
     };
   }, [authToken, clearAuthSession, setAuthConfig, setAuthSession, setCurrentSession, setSessions]);
 
+  useEffect(() => {
+    const refreshAccessState = async () => {
+      if (!authToken && !anonymousModeAllowed) {
+        return;
+      }
+
+      if (!authToken && !activeUserId) {
+        return;
+      }
+
+      try {
+        const sessions = await getSessions(activeUserId || undefined);
+        setSessions(sessions);
+        setCurrentSession(sessions[0] ?? null);
+      } catch {
+        // Ignore background refresh failures.
+      }
+    };
+
+    const onWindowFocus = () => {
+      void refreshAccessState();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshAccessState();
+      }
+    };
+
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [activeUserId, anonymousModeAllowed, authToken, setCurrentSession, setSessions]);
+
   return (
     <div className="min-h-dvh bg-bg-base">
       <AppNavbar />
@@ -120,13 +173,15 @@ function AppShell() {
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const location = useLocation();
   const authToken = useStore((state) => state.authToken);
+  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const closePaywall = useStore((state) => state.closePaywall);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const setPendingRoute = useStore((state) => state.setPendingRoute);
+  const routeAllowsAnonymous = location.pathname === "/interview" && anonymousModeAllowed;
 
   useEffect(() => {
-    if (!authToken) {
+    if (!authToken && !routeAllowsAnonymous) {
       closePaywall();
       if (location.pathname === "/interview") {
         setPendingRoute(null);
@@ -139,9 +194,9 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
       setPendingStartInterview(false);
       openAccountAccess(false);
     }
-  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, setPendingRoute, setPendingStartInterview]);
+  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, routeAllowsAnonymous, setPendingRoute, setPendingStartInterview]);
 
-  if (!authToken) {
+  if (!authToken && !routeAllowsAnonymous) {
     return <Navigate to="/" replace />;
   }
 

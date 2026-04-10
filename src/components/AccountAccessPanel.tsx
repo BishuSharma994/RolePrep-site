@@ -177,6 +177,7 @@ export default function AccountAccessPanel() {
         expiresAt: response.expiresAt,
       });
       setActiveUserId(response.userId);
+      setEmail(response.email);
       setOtp("");
       setGeneratedCode("");
       setGeneratedCodeExpiry(0);
@@ -266,9 +267,14 @@ export default function AccountAccessPanel() {
     } catch {
       // Even if backend logout fails, clear the local session.
     } finally {
-      clearAuthSession();
+      clearAuthSession(anonymousModeAllowed);
       const fallbackUserId = useStore.getState().activeUserId;
-      await refreshSessionsForUser(fallbackUserId);
+      if (anonymousModeAllowed && fallbackUserId) {
+        await refreshSessionsForUser(fallbackUserId);
+      } else {
+        setSessions([]);
+        setCurrentSession(null);
+      }
       setLoggingOut(false);
       setPendingStartInterview(false);
       setPendingRoute(null);
