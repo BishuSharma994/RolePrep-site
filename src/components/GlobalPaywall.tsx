@@ -14,8 +14,6 @@ const PLANS: Array<{ planType: PlanType; label: string; price: string; blurb: st
 export default function GlobalPaywall() {
   const navigate = useNavigate();
   const authToken = useStore((state) => state.authToken);
-  const authRequired = useStore((state) => state.authRequired);
-  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const isPaywallOpen = useStore((state) => state.isPaywallOpen);
   const activeUserId = useStore((state) => state.activeUserId);
   const closePaywall = useStore((state) => state.closePaywall);
@@ -57,7 +55,7 @@ export default function GlobalPaywall() {
   };
 
   const handleFreeSession = () => {
-    if (!authToken && (authRequired || !anonymousModeAllowed)) {
+    if (!authToken) {
       closePaywall();
       setPendingStartInterview(true);
       openAccountAccess(true);

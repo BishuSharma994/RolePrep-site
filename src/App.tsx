@@ -173,15 +173,13 @@ function AppShell() {
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const location = useLocation();
   const authToken = useStore((state) => state.authToken);
-  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const openAccountAccess = useStore((state) => state.openAccountAccess);
   const closePaywall = useStore((state) => state.closePaywall);
   const setPendingStartInterview = useStore((state) => state.setPendingStartInterview);
   const setPendingRoute = useStore((state) => state.setPendingRoute);
-  const routeAllowsAnonymous = location.pathname === "/interview" && anonymousModeAllowed;
 
   useEffect(() => {
-    if (!authToken && !routeAllowsAnonymous) {
+    if (!authToken) {
       closePaywall();
       if (location.pathname === "/interview") {
         setPendingRoute(null);
@@ -194,9 +192,9 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
       setPendingStartInterview(false);
       openAccountAccess(false);
     }
-  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, routeAllowsAnonymous, setPendingRoute, setPendingStartInterview]);
+  }, [authToken, closePaywall, location.hash, location.pathname, location.search, openAccountAccess, setPendingRoute, setPendingStartInterview]);
 
-  if (!authToken && !routeAllowsAnonymous) {
+  if (!authToken) {
     return <Navigate to="/" replace />;
   }
 

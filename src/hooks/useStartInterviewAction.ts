@@ -34,14 +34,13 @@ export async function continueStartInterviewFlow(navigate: NavigateFunction) {
   const {
     activeUserId,
     authToken,
-    anonymousModeAllowed,
     openPaywall,
     closePaywall,
     setCurrentSession,
     setSessions,
   } = useStore.getState();
 
-  if (!authToken && !anonymousModeAllowed) {
+  if (!authToken) {
     closePaywall();
     return;
   }
@@ -70,14 +69,12 @@ export function useStartInterviewAction() {
     const stateAfterConfig = await hydrateAuthConfigIfNeeded();
     const {
       authToken,
-      authRequired,
-      anonymousModeAllowed,
       openAccountAccess,
       closePaywall,
       setPendingStartInterview,
     } = stateAfterConfig;
 
-    if (!authToken && (authRequired || !anonymousModeAllowed)) {
+    if (!authToken) {
       closePaywall();
       setPendingStartInterview(true);
       openAccountAccess(true);

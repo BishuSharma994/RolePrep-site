@@ -115,8 +115,6 @@ export default function InterviewPage() {
   const navigate = useNavigate();
   const activeUserId = useStore((state) => state.activeUserId);
   const authToken = useStore((state) => state.authToken);
-  const authRequired = useStore((state) => state.authRequired);
-  const anonymousModeAllowed = useStore((state) => state.anonymousModeAllowed);
   const transcript = useStore((state) => state.transcript);
   const analysis = useStore((state) => state.analysis);
   const currentSession = useStore((state) => state.currentSession);
@@ -384,7 +382,7 @@ export default function InterviewPage() {
   async function handleMicButton() {
     if (uiState === "processing") return;
     if (recorderState === "recording") return stop();
-    if (!authToken && (authRequired || !anonymousModeAllowed)) {
+    if (!authToken) {
       setPendingStartInterview(true);
       openAccountAccess(true);
       return;
